@@ -1,0 +1,183 @@
+\documentclass{article}
+
+\usepackage[a4paper,margin=25mm]{geometry}
+\usepackage[colorlinks=true,unicode=true]{hyperref}
+\usepackage{amsmath}
+\usepackage{amssymb}
+%\usepackage{amsfonts} % automatically loaded by amsmath and amssymb
+\usepackage{mathtools}
+\DeclareMathOperator{\Var}{Var}
+\DeclareMathOperator{\Cov}{Cov}
+
+\begin{document}
+\title{Structure Function and Covariance}
+\author {Éric Thiébaut}
+\date{1st version: March 10, 2023; last version: March 28, 2023}
+\maketitle
+
+\section{Structure function of a random field}
+
+The structure function of the random field $\phi(r)$ is defined by:
+\begin{equation}
+  \label{eq:D-phi}
+  D_{\phi}(\Delta r) = \langle(\phi(r) - \phi(r+\Delta r))^{2}\rangle
+\end{equation}
+which holds at a given time whatever $r$ (stationarity) and where
+$\langle\ldots\rangle$ denotes expectation. An example of such a field is the
+random phase delays caused by a turbulent medium.
+
+Since Eq.~\eqref{eq:D-phi} holds whatever $r$, the structure function is an
+even function:
+\begin{equation}
+  \label{eq:D-phi-even}
+  D_{\phi}(-\Delta r) =  D_{\phi}(\Delta r).
+\end{equation}
+
+Developping the expression of the field structure function and assuming
+$\langle\phi(r)\rangle = 0$ yields:
+\begin{align}
+  D_{\phi}(\Delta r)
+  %&= \langle(\phi(r) - \phi(r+\Delta r))^{2}\rangle \notag \\
+  &= \langle\phi(r)^{2}\rangle + \langle\phi(r+\Delta r)^{2}\rangle
+    - 2\,\langle\phi(r)\,\phi(r+\Delta r)\rangle\notag \\
+  &= \Var_{\phi}(r) + \Var_{\phi}(r + \Delta r) - 2 \Cov_{\phi}(r, r + \Delta r)
+\end{align}
+where $\Cov_{\phi}(r,r')$ is the spatial covariance of the field defined by:
+\begin{align}
+  \Cov_{\phi}(r,r')
+  &= \langle\phi(r)\,\phi(r')\rangle
+\end{align}
+while $\Var_{\phi}(r) = \Cov_{\phi}(r,r)$ is the spatial variance of the field.
+
+Hence the spatial covariance of the field can be expressed as:
+\begin{equation}
+  \label{eq:Cov-phi}
+  \Cov_{\phi}(r,r') = \frac12\,\left(
+    \Var_{\phi}(r) + \Var_{\phi}(r') - D_{\phi}(r - r')
+  \right).
+\end{equation}
+
+
+\section{De-Pistoned field}
+
+The de-pistoned field $\psi(r)$ over a finite size volume $\mathcal{V}$ is
+defined by ($\forall r \in \mathcal{V}$):
+\begin{align}
+  \psi(r) = \phi(r) - \frac{1}{|\mathcal{V}|} \int_{\mathcal{V}} \phi(r')\,\mathrm{d}r',
+\end{align}
+with $|\mathcal{V}|=\int_{\mathcal{V}}\mathrm{d}r$ the volume of $\mathcal{V}$.
+
+Introducing the support function\footnote{so-called \emph{pupil function} in
+  optics} $S(r)$ such that for any function $f(r)$:
+\begin{align}
+  \label{eq:S-def}
+  \int f(r)\,S(r)\,\mathrm{d}r = \frac{1}{|\mathcal{V}|} \int_{\mathcal{V}} f(r)\,\mathrm{d}r,
+\end{align}
+the de-pistoned field writes:
+\begin{align}
+  \psi(r) = \phi(r) - \int \phi(r')\,S(r')\,\mathrm{d}r'.
+\end{align}
+
+A property of the support function is that:
+\begin{align}
+  \int S(r)\,\mathrm{d}r = 1,
+\end{align}
+which directly follows from Eq.~\eqref{eq:S-def} by taking $f(r) = 1$ whatever $r$.
+
+Obviously, the structure functions of the field $\phi(r)$ and of the de-pistoned
+field $\psi(r)$ are the same\footnote{except for the restriction that
+  $\Delta r$ must fit inside $\mathcal{V}$}.
+
+By linearity and since the field is centered and the aperture finite, the
+de-pistoned field is also centered.
+\begin{quote}
+  \emph{Proof:}
+  \begin{align}
+    \langle\psi(r)\rangle
+    = \langle\phi(r)\rangle -
+      \frac{1}{|\mathcal{V}|} \int_{\mathcal{V}} \langle\phi(r')\rangle\,\mathrm{d}r'
+    = 0
+  \end{align}
+  which follows from the linearity of the sum and of the integral and from that
+  $\langle\phi(r)\rangle = 0$ whatever $r$. $\blacksquare$
+\end{quote}
+
+The covariance of the de-pistoned field can be computed as follows
+($\forall (r,r') \in \mathcal{V}^{2}$):
+\begin{align}
+  \Cov_{\psi}(r,r')
+  &= \langle\psi(r)\,\psi(r')\rangle \notag \\
+  &= \left\langle\left(\phi(r) - \int \phi(r'')\,S(r'')\,\mathrm{d}r''\right)\,
+    \left(\phi(r') - \int \phi(r'')\,S(r'')\,\mathrm{d}r''\right)\right\rangle \notag \\
+  &= \Cov_{\phi}(r,r')
+    - \int \Cov_{\phi}(r,r'')\,S(r'')\,\mathrm{d}r''
+    - \int \Cov_{\phi}(r',r'')\,S(r'')\,\mathrm{d}r'' \notag\\
+  &\quad + \iint \Cov_{\phi}(r'',r''')\,S(r'')\,\mathrm{d}r''\,S(r''')\,\mathrm{d}r'''.
+    \label{eq:Cov-psi-1}
+\end{align}
+From Eq.~\eqref{eq:Cov-phi}:
+\begin{align}
+  \int \Cov_{\phi}(r,r')\,S(r')\,\mathrm{d}r'
+  &= \frac{1}{2}\,\int \left(
+    \Var_{\phi}(r) + \Var_{\phi}(r') - D_{\phi}(r - r')
+    \right)\,S(r')\,\mathrm{d}r'\notag\\
+  &= \frac{1}{2}\,\Var_{\phi}(r)
+    + \frac{1}{2}\,\int \left(
+    \Var_{\phi}(r') - D_{\phi}(r - r')\right)\,S(r')\,\mathrm{d}r',
+    \label{eq:Cov-psi-2}
+\end{align}
+and averaging over the aperture one more time yields:
+\begin{align}
+  \iint \Cov_{\phi}(r,r')\,S(r)\,\mathrm{d}r\,S(r')\,\mathrm{d}r'
+  &= \int \Var_{\phi}(r)\,S(r)\,\mathrm{d}r
+  - \frac{1}{2}\,\iint D_{\phi}(r - r')\,S(r)\,\mathrm{d}r\,S(r')\,\mathrm{d}r'.
+    \label{eq:Cov-psi-3}
+\end{align}
+Putting Eqs.~\eqref{eq:Cov-phi}, \eqref{eq:Cov-psi-2}, and \eqref{eq:Cov-psi-3}
+in Eq.~\eqref{eq:Cov-psi-1} yields:
+\begin{align}
+  \Cov_{\psi}(r,r')
+  &= \frac{1}{2} \int \left(D_{\phi}(r - r'') + D_{\phi}(r' - r'')\right)\,S(r'')\,\mathrm{d}r''
+    - \frac{1}{2} \, D_{\phi}(r - r') \notag\\
+  &\quad - \frac{1}{2}\,\iint D_{\phi}(r'' - r''')\,S(r'')\,\mathrm{d}r''\,S(r''')\,\mathrm{d}r'''.
+    \label{eq:Cov-psi-4}
+\end{align}
+Hence the covariance of the de-pistoned field only depends on the field
+structure function.
+
+To quickly compute $\Cov_{\psi}(r,r')$, it is advantageous to introduce:
+\begin{equation}
+  \label{eq:K-phi}
+  K_{\phi}(r) = \int D_{\phi}(r - r')\,S(r')\,\mathrm{d}r',
+\end{equation}
+and rewrite the covariance of the de-pistoned field as:
+\begin{equation}
+  \boxed{
+    \Cov_{\psi}(r,r')
+    = \frac{1}{2}\,\left[
+      K_{\phi}(r) + K_{\phi}(r') - \int K_{\phi}(r'')\,S(r'')\,\mathrm{d}r''
+      - D_{\phi}(r - r')
+    \right].
+  }
+  \label{eq:Cov-psi}
+\end{equation}
+
+
+\section{Invertible covariance}
+
+Since the piston of the de-pistoned field $\psi(r)$ is zero, the covariance of
+the de-pistoned field is rank deficient and thus non-invertible. Adding a
+random piston $\alpha \sim \mathcal{N}(0,\sigma^{2})$ to the de-pistoned field
+$\psi(r)$ yields a field inside the aperture which has an invertible
+covariance\footnote{provided $\sigma \not= 0$} ($\forall r \in \mathcal{V}$):
+\begin{align}
+  \varphi(r) = \psi(r) + \alpha.
+\end{align}
+Since $\alpha$ and $\psi(r)$ are mutually independent (whatever $r$), the covariance
+of the field $\varphi(r)$ is easy to compute:
+\begin{align}
+  \Cov_{\varphi}(r,r') = \Cov_{\psi}(r,r') + \sigma^{2}.
+  \label{eq:Cov-varphi}
+\end{align}
+
+\end{document}

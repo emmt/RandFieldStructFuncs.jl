@@ -2,3 +2,10 @@
 *.jl.cov
 *.jl.mem
 /Manifest.toml
+/notes/.auctex-auto
+/notes/*.aux
+/notes/*.log
+/notes/*.log
+/notes/*.out
+/notes/*.pdf
+/notes/*.synctex.gz

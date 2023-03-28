@@ -15,3 +15,5 @@ positions.
 
 This package let you build structure function objects, generate the associated
 covariance matrix, and simulate random fields having a given structure function.
+
+This [LaTeX file](notes/structure-functions.tex) provides some background.
