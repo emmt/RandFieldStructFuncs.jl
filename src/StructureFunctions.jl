@@ -83,9 +83,9 @@ function normalize_support(::Type{T}, S::AbstractMatrix) where {T<:AbstractFloat
     s = zero(T)
     flag = true
     @inbounds @simd for i in eachindex(S)
-        Si = as(T, S[i])
-        flag &= (Si ≥ zero(Si))
-        s += Si
+        S_i = as(T, S[i])
+        flag &= (S_i ≥ zero(S_i))
+        s += S_i
     end
     flag || throw(ArgumentError("support function must be nonnegative everywhere"))
     s > zero(s) || throw(ArgumentError("support function must have some nonzeros"))
@@ -110,7 +110,9 @@ indices inside the support `S` are considered.
 Optional argument `σ` is the standard deviation of an additional independent
 random piston.
 
-The result is a flattened `n×n` covariance matrix with `n = length(S)`.
+The result is a flattened `n×n` covariance matrix with `n = length(S)` if
+`shrink` is false, or `n` the number of non-zeros in the support `S` if
+`shrink` is true.
 
 The implemented method is described in the notes accompanying this package.
 
@@ -129,9 +131,9 @@ function cov(f::StructureFunction{T},
     @inbounds for r ∈ R
         s = zero(T)
         for r′ ∈ R
-            Sr′ = S[r′]
-            iszero(Sr′) && continue
-            s += oftype(s, f(r - r′)*Sr′)
+            S_r′ = S[r′]
+            iszero(S_r′) && continue
+            s += oftype(s, f(r - r′)*S_r′)
         end
         K[r] = s
     end
@@ -145,10 +147,7 @@ function cov(f::StructureFunction{T},
 
     # Compute covariance.
     if shrink
-        nnz = 0 # to count number of non-zeros
-        @inbounds @simd for i in eachindex(S)
-            nnz += iszero(S[i]) ? 0 : 1
-        end
+        nnz = countnz(S)
         C = Array{T}(undef, (nnz, nnz))
         i = 0
         @inbounds for r ∈ R
@@ -185,6 +184,14 @@ function cov(f::StructureFunction{T},
         end
     end
     return C
+end
+
+function countnz(S::AbstractArray{T}) where {T}
+    nnz = 0 # to count number of non-zeros
+    @inbounds @simd for i in eachindex(S)
+        nnz += iszero(S[i]) ? 0 : 1
+    end
+    return nnz
 end
 
 end
