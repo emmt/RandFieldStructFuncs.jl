@@ -19,6 +19,8 @@ using Test, Statistics
     n = length(S)
     nnz = count(x -> x > zero(x), S)
     @test sum(StructureFunctions.normalize_support(Float64, S)) ≈ 1
+
+    # Covariance matrix.
     C = cov(f, S)
     @test size(C) == (n, n)
     @test C == C'
@@ -28,6 +30,38 @@ using Test, Statistics
     C = cov(f, S; shrink=true)
     @test size(C) == (nnz, nnz)
     @test C == C'
+
+    # Sampled Structure function.
+    A =  SampledStructureFunction(S)
+    let nobs = StructureFunctions.nobs,
+        weights = StructureFunctions.weights,
+        support = StructureFunctions.support,
+        countnz = StructureFunctions.countnz
+        @test valtype(A) === eltype(values(A))
+        @test nobs(A) == 0
+        @test countnz(support(A)) == countnz(S)
+        @test extrema(values(A)) == (0, 0)
+        @test extrema(weights(A)) == (0, 0)
+        for i in 1:43
+            x = randn(valtype(A), size(support(A)))
+            push!(A, x)
+            @test nobs(A) == i
+            wmin, wmax = extrema(weights(A))
+            @test wmin ≥ 0
+            @test wmax > 0
+        end
+        n = nobs(A)
+        nnz = countnz(support(A))
+        for i in 1:2
+            x = randn(valtype(A), nnz)
+            push!(A, x)
+            @test nobs(A) == i+n
+            wmin, wmax = extrema(weights(A))
+            @test wmin ≥ 0
+            @test wmax > 0
+        end
+    end
+
 end
 
 end # module

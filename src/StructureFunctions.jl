@@ -2,10 +2,11 @@ module StructureFunctions
 
 export
     KolmogorovStructFunc,
+    SampledStructureFunction,
     StructureFunction,
     cov
 
-using Statistics, AsType
+using AsType, OffsetArrays, Statistics
 
 import Statistics: cov
 
@@ -194,4 +195,123 @@ function countnz(S::AbstractArray{T}) where {T}
     return nnz
 end
 
+"""
+    A = SampledStructureFunction{T}(S)
+
+yields a (empty) sampled structure function with values of floating-point type
+`T` and for a support `S`.
+
+The base method `push!` can be used to *integrate* data into the sampled
+structure function object:
+
+    push!(A, x)
+
+where `x` is a random sample which can be an array of the same size as `S` or a
+vector whose length is the number of non-zeros in the support `S`.
+
+Base methods `values(A)` and `valtype(A)` yield the integrated values and their
+type for the sampled structure function `A`.
+
+Unexported methods `StructureFunctions.support(A)`,
+`StructureFunctions.weights(A)`, and `StructureFunctions.nobs(A)` yield the
+support, the integrated weights, and the number of observations for the sampled
+structure function `A`.
+
+"""
+mutable struct SampledStructureFunction{T<:AbstractFloat,N,
+                                        S<:AbstractArray{T,N},
+                                        A<:OffsetArray{T,N}}
+    support::S # normalized support
+    vals::A    # averaged values
+    wgts::A    # cumulated weights
+    nobs::Int  # number of observations
 end
+
+Base.valtype(A::SampledStructureFunction) = valtype(typeof(A))
+Base.valtype(::Type{<:SampledStructureFunction{T}}) where {T} = T
+Base.values(A::SampledStructureFunction) = A.vals
+
+support(A::SampledStructureFunction) = A.support
+weights(A::SampledStructureFunction) = A.wgts
+nobs(A::SampledStructureFunction) = A.nobs
+
+SampledStructureFunction(S::AbstractArray{T,N}) where {T,N} =
+    SampledStructureFunction{float(T)}(S)
+
+function SampledStructureFunction{T}(S::AbstractArray{<:Any,N}) where {T<:AbstractFloat,N}
+    S = normalize_support(T, S)
+    inds = map(r -> (first(r) - last(r)):(last(r) - first(r)), axes(S))
+    dims = map(d -> 2d - 1, size(S))
+    vals = OffsetArray(zeros(T, dims), inds)
+    wgts = OffsetArray(zeros(T, dims), inds)
+    return SampledStructureFunction{T,N,typeof(S),typeof(vals)}(S, vals, wgts, 0)
+end
+
+function Base.push!(A::SampledStructureFunction{T,N},
+                    x::Union{AbstractArray{<:Real,N},
+                             AbstractVector{<:Real}}) where {T,N}
+    S = support(A)
+    if x isa AbstractArray{<:Real,N} && axes(x) == axes(S)
+        # Assume x is for all the nodes, inside and outside the support.
+        unsafe_update!(Val(:full), A, x)
+    elseif x isa AbstractVector{<:Real} && axes(x) == (Base.OneTo(countnz(S)),)
+        # Assume x is only for the nodes inside the support.
+        unsafe_update!(Val(:sparse), A, x)
+    else
+        throw(DimensionMismatch("incompatible dimensions/indices"))
+    end
+    A.nobs += 1
+    return A
+end
+
+function unsafe_update!(::Val{:full},
+                        A::SampledStructureFunction{T,N},
+                        x::AbstractArray{<:Real,N}) where {T,N}
+    S = support(A)
+    R = CartesianIndices(S)
+    @inbounds for r in R
+        S_r = S[r]
+        iszero(S_r) && continue
+        x_r = as(T, x[r])
+        for r′ in R
+            S_r′ = S[r′]
+            iszero(S_r′) && continue
+            x_r′ = as(T, x[r′])
+            unsafe_update!(A, r - r′, S_r*S_r′, abs2(x_r - x_r′))
+        end
+    end
+    nothing
+end
+
+function unsafe_update!(::Val{:sparse},
+                        A::SampledStructureFunction{T,N},
+                        x::AbstractVector{<:Real}) where {T,N}
+    S = support(A)
+    R = CartesianIndices(S)
+    i = 0
+    @inbounds for r in R
+        S_r = S[r]
+        iszero(S_r) && continue
+        x_r = as(T, x[i += 1])
+        i′ = 0
+        for r′ in R
+            S_r′ = S[r′]
+            iszero(S_r′) && continue
+            x_r′ = as(T, x[i′ += 1])
+            unsafe_update!(A, r - r′, S_r*S_r′, abs2(x_r - x_r′))
+        end
+    end
+    nothing
+end
+
+@inline function unsafe_update!(A::SampledStructureFunction{T,N},
+                                Δr::CartesianIndex{N},
+                                wgt::T,
+                                val::T) where {T, N}
+    wgts = weights(A)
+    vals = values(A)
+    vals[Δr] = (wgts[Δr]*vals[Δr] + wgt*val)/(wgts[Δr] + wgt)
+    wgts[Δr] += wgt
+end
+
+end # module
