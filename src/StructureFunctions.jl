@@ -30,7 +30,7 @@ calling the structure function object with a tuple of coordinates.
 """
 abstract type StructureFunction{T<:AbstractFloat} <: Function; end
 
-# convert Cartesian index.
+# convert Cartesian index. NOTE: Only works for Julia ≥ 1.3
 (f::StructureFunction)(r::CartesianIndex) = f(Tuple(r))
 
 Base.convert(::Type{S}, f::S) where {S<:StructureFunction} = f
