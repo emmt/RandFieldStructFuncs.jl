@@ -53,7 +53,7 @@ using StructureFunctions: LazyCovariance, PackedLazyCovariance
     @test LC ≈ C
     @test diag(LC) === var(LC)
 
-    # Sampled Structure function.
+    # Empirical Structure function.
     A =  EmpiricalStructureFunction(S)
     let countnz = StructureFunctions.countnz
         @test values(A) === A.values
@@ -81,6 +81,15 @@ using StructureFunctions: LazyCovariance, PackedLazyCovariance
             @test wmax > 0
         end
     end
+    @test all(A .== A.values)
+    for i in eachindex(A)
+        A[i] = zero(eltype(A))
+    end
+    @test all(iszero, A.values)
+    for i in eachindex(A)
+        A[i] = one(eltype(A))
+    end
+    @test all(isone, A.values)
 
 end
 

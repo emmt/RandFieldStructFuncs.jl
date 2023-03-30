@@ -527,9 +527,15 @@ end
     A = EmpiricalStructureFunction{T}(S)
 
 yields an (empty) empirical structure function with values of floating-point
-type `T` and for a support `S`.
+type `T` and for a support `S`. An empirical structure function `A` behaves
+like an array. For example:
 
-The base method `push!` can be used to *integrate* data into the sampled
+    A[Δr]
+
+yields the value of the empirical structure function for a displacement `Δr`
+which may be specified as a Cartesian index.
+
+The base method `push!` can be used to *integrate* data into the empirical
 structure function object:
 
     push!(A, x)
@@ -550,7 +556,7 @@ type for the sampled structure function `A`.
 """
 mutable struct EmpiricalStructureFunction{T<:AbstractFloat,N,
                                           S<:AbstractArray{T,N},
-                                          A<:OffsetArray{T,N}}
+                                          A<:OffsetArray{T,N}} <: AbstractArray{T,N}
     support::S # normalized support
     values::A  # weighted average of values
     weights::A # cumulated weights
@@ -577,6 +583,25 @@ function EmpiricalStructureFunction{T}(S::AbstractArray{<:Any,N}) where {T<:Abst
     vals = OffsetArray(zeros(T, dims), inds)
     wgts = OffsetArray(zeros(T, dims), inds)
     return EmpiricalStructureFunction{T,N,typeof(S),typeof(vals)}(S, vals, wgts, 0)
+end
+
+# Implement abstract array API.
+Base.length(A::EmpiricalStructureFunction) = length(A.values)
+Base.size(A::EmpiricalStructureFunction) = size(A.values)
+Base.axes(A::EmpiricalStructureFunction) = axes(A.values)
+Base.IndexStyle(::EmpiricalStructureFunction{T,N,S,A}) where {T,N,S,A} = IndexStyle(A)
+
+@inline function Base.getindex(A::EmpiricalStructureFunction, I::Vararg{Int})
+    vals = A.values
+    @boundscheck checkbounds(Bool, vals, I...) || throw(BoundsError(A, I...))
+    @inbounds vals[I...]
+end
+
+@inline function Base.setindex!(A::EmpiricalStructureFunction, x, I)
+    vals = A.values
+    @boundscheck checkbounds(Bool, vals, I...) || throw(BoundsError(A, I...))
+    @inbounds vals[I...] = x
+    return A
 end
 
 function Base.push!(A::EmpiricalStructureFunction{T,N},
