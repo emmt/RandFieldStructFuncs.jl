@@ -372,9 +372,8 @@ end
         if iszero(S[i]) | iszero(S[j])
             zero(T)
         else
+            D, var = A.func, A.diag
             Δr = i - j
-            D = A.func
-            var = A.diag
             ((var[i] + var[j]) - D(Δr))/2
         end
     end
@@ -491,7 +490,7 @@ function PackedLazyCovariance(A::LazyCovariance{T,N})  where {T<:AbstractFloat,N
         if inside
             i += 1
             inds[i] = r
-            diag[i] = var(A)[r]
+            diag[i] = A.diag[r]
         end
     end
     return PackedLazyCovariance(f, S, mask, inds, diag)
