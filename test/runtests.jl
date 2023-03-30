@@ -54,31 +54,29 @@ using StructureFunctions: LazyCovariance, ShrinkedLazyCovariance
     @test diag(LC) === var(LC)
 
     # Sampled Structure function.
-    A =  SampledStructureFunction(S)
-    let nobs = StructureFunctions.nobs,
-        weights = StructureFunctions.weights,
-        support = StructureFunctions.support,
-        countnz = StructureFunctions.countnz
+    A =  EmpiricalStructureFunction(S)
+    let countnz = StructureFunctions.countnz
+        @test values(A) === A.values
         @test valtype(A) === eltype(values(A))
-        @test nobs(A) == 0
-        @test countnz(support(A)) == countnz(S)
-        @test extrema(values(A)) == (0, 0)
-        @test extrema(weights(A)) == (0, 0)
+        @test A.nobs == 0
+        @test countnz(A.support) == countnz(S)
+        @test extrema(A.values) == (0, 0)
+        @test extrema(A.weights) == (0, 0)
         for i in 1:43
-            x = randn(valtype(A), size(support(A)))
+            x = randn(valtype(A), size(A.support))
             push!(A, x)
-            @test nobs(A) == i
-            wmin, wmax = extrema(weights(A))
+            @test A.nobs == i
+            wmin, wmax = extrema(A.weights)
             @test wmin ≥ 0
             @test wmax > 0
         end
-        n = nobs(A)
-        nnz = countnz(support(A))
+        n = A.nobs
+        nnz = countnz(A.support)
         for i in 1:2
             x = randn(valtype(A), nnz)
             push!(A, x)
-            @test nobs(A) == i+n
-            wmin, wmax = extrema(weights(A))
+            @test A.nobs == i+n
+            wmin, wmax = extrema(A.weights)
             @test wmin ≥ 0
             @test wmax > 0
         end

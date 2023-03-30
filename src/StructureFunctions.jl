@@ -1,8 +1,8 @@
 module StructureFunctions
 
 export
+    EmpiricalStructureFunction,
     KolmogorovStructFunc,
-    SampledStructureFunction,
     StructureFunction,
     cov, var, diag
 
@@ -508,10 +508,10 @@ Base.IndexStyle(::ShrinkedLazyCovariance) = IndexCartesian()
 end
 
 """
-    A = SampledStructureFunction{T}(S)
+    A = EmpiricalStructureFunction{T}(S)
 
-yields a (empty) sampled structure function with values of floating-point type
-`T` and for a support `S`.
+yields an (empty) empirical structure function with values of floating-point
+type `T` and for a support `S`.
 
 The base method `push!` can be used to *integrate* data into the sampled
 structure function object:
@@ -520,6 +520,13 @@ structure function object:
 
 where `x` is a random sample which can be an array of the same size as `S` or a
 vector whose length is the number of non-zeros in the support `S`.
+
+An empirical structure function object `A` has the following properties:
+
+    A.support # normalized support
+    A.values  # weighted average of values
+    A.weights # cumulated weigts
+    A.nobs    # number of observations
 
 Base methods `values(A)` and `valtype(A)` yield the integrated values and their
 type for the sampled structure function `A`.
@@ -530,36 +537,36 @@ support, the integrated weights, and the number of observations for the sampled
 structure function `A`.
 
 """
-mutable struct SampledStructureFunction{T<:AbstractFloat,N,
-                                        S<:AbstractArray{T,N},
-                                        A<:OffsetArray{T,N}}
+mutable struct EmpiricalStructureFunction{T<:AbstractFloat,N,
+                                          S<:AbstractArray{T,N},
+                                          A<:OffsetArray{T,N}}
     support::S # normalized support
-    vals::A    # averaged values
-    wgts::A    # cumulated weights
+    values::A  # weighted average of values
+    weights::A # cumulated weights
     nobs::Int  # number of observations
 end
 
-Base.valtype(A::SampledStructureFunction) = valtype(typeof(A))
-Base.valtype(::Type{<:SampledStructureFunction{T}}) where {T} = T
-Base.values(A::SampledStructureFunction) = A.vals
+Base.valtype(A::EmpiricalStructureFunction) = valtype(typeof(A))
+Base.valtype(::Type{<:EmpiricalStructureFunction{T}}) where {T} = T
+Base.values(A::EmpiricalStructureFunction) = A.values
 
-support(A::SampledStructureFunction) = A.support
-weights(A::SampledStructureFunction) = A.wgts
-nobs(A::SampledStructureFunction) = A.nobs
+support(A::EmpiricalStructureFunction) = A.support
+weights(A::EmpiricalStructureFunction) = A.weights
+nobs(A::EmpiricalStructureFunction) = A.nobs
 
-SampledStructureFunction(S::AbstractArray{T,N}) where {T,N} =
-    SampledStructureFunction{float(T)}(S)
+EmpiricalStructureFunction(S::AbstractArray{T,N}) where {T,N} =
+    EmpiricalStructureFunction{float(T)}(S)
 
-function SampledStructureFunction{T}(S::AbstractArray{<:Any,N}) where {T<:AbstractFloat,N}
+function EmpiricalStructureFunction{T}(S::AbstractArray{<:Any,N}) where {T<:AbstractFloat,N}
     S = normalize_support(T, S)
     inds = map(r -> (first(r) - last(r)):(last(r) - first(r)), axes(S))
     dims = map(d -> 2d - 1, size(S))
     vals = OffsetArray(zeros(T, dims), inds)
     wgts = OffsetArray(zeros(T, dims), inds)
-    return SampledStructureFunction{T,N,typeof(S),typeof(vals)}(S, vals, wgts, 0)
+    return EmpiricalStructureFunction{T,N,typeof(S),typeof(vals)}(S, vals, wgts, 0)
 end
 
-function Base.push!(A::SampledStructureFunction{T,N},
+function Base.push!(A::EmpiricalStructureFunction{T,N},
                     x::Union{AbstractArray{<:Real,N},
                              AbstractVector{<:Real}}) where {T,N}
     S = support(A)
@@ -577,7 +584,7 @@ function Base.push!(A::SampledStructureFunction{T,N},
 end
 
 function unsafe_update!(::Val{:full},
-                        A::SampledStructureFunction{T,N},
+                        A::EmpiricalStructureFunction{T,N},
                         x::AbstractArray{<:Real,N}) where {T,N}
     S = support(A)
     R = CartesianIndices(S)
@@ -596,7 +603,7 @@ function unsafe_update!(::Val{:full},
 end
 
 function unsafe_update!(::Val{:sparse},
-                        A::SampledStructureFunction{T,N},
+                        A::EmpiricalStructureFunction{T,N},
                         x::AbstractVector{<:Real}) where {T,N}
     S = support(A)
     R = CartesianIndices(S)
@@ -616,7 +623,7 @@ function unsafe_update!(::Val{:sparse},
     nothing
 end
 
-@inline function unsafe_update!(A::SampledStructureFunction{T,N},
+@inline function unsafe_update!(A::EmpiricalStructureFunction{T,N},
                                 Δr::CartesianIndex{N},
                                 wgt::T,
                                 val::T) where {T, N}
