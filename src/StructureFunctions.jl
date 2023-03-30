@@ -145,7 +145,8 @@ given by:
 
     Cov(r,r′) = (V[r] + V[r′] - f(r - r′))/2
 
-if `S[r]` and `S[r′]` are both non-zero, the covariance being zero otherwise.
+if `S[r]` and `S[r′]` are both non-zero, the covariance being zero if any of
+`r` or `r′` is outside the support.
 
 """
 function var(f::StructureFunction{T},
@@ -283,14 +284,23 @@ function is `f` over a support defined by `S` and whose piston mode has a
 standard deviation of `σ`. Indices `i` and `j` can be linear indices or
 Cartesian indices that must be valid to index `S`.
 
+The fields of a lazy covariance object `Cov` may be retrieved by the `Cov.key`
+syntax or via getters:
+
+    Cov.func    # yields the structure function
+    Cov.support # yields the normalized support
+    Cov.diag    # yields the diagonal entries, also non-uniform variances
+    diag(Cov)   # idem.
+    var(Cov)    # idem.
+
 """
 struct LazyCovariance{T<:AbstractFloat,N,
                       F<:StructureFunction{T},
                       S<:AbstractArray{T,N},
                       D<:AbstractArray{T,N}} <: AbstractMatrix{T}
-    sf::F   # structure function
-    sup::S  # normalized support
-    diag::D # diagonal entries, non-uniform variance
+    func::F     # structure function
+    support::S  # normalized support
+    diag::D     # diagonal entries, non-uniform variance
 
     # The inner constructor is to ensure that arrays standard linear indexing
     # and the the same axes.
@@ -309,8 +319,7 @@ struct LazyCovariance{T<:AbstractFloat,N,
 end
 
 # Getters.
-StructureFunction(A::LazyCovariance) = A.sf
-support(A::LazyCovariance) = A.sup
+StructureFunction(A::LazyCovariance) = A.func
 diag(A::LazyCovariance) = A.diag
 var(A::LazyCovariance) = diag(A)
 
@@ -325,28 +334,28 @@ end
 
 # Implement abstract array API.
 Base.length(A::LazyCovariance) = begin
-    n = length(diag(A))
+    n = length(A.diag)
     return n^2
 end
 Base.size(A::LazyCovariance) = begin
-    n = length(diag(A))
+    n = length(A.diag)
     return (n, n)
 end
 Base.axes(A::LazyCovariance) = begin
-    r = Base.OneTo(length(diag(A)))
+    r = Base.OneTo(length(A.diag))
     return (r, r)
 end
 Base.IndexStyle(::LazyCovariance) = IndexCartesian()
 
 @inline function Base.getindex(A::LazyCovariance{T}, i::Int, j::Int) where {T}
-    S = support(A)
+    S = A.support
     @boundscheck (checkbounds(Bool, S, i) & checkbounds(Bool, S, j)) ||
         throw(BoundsError(A, (i, j)))
     @inbounds begin
         if iszero(S[i]) | iszero(S[j])
             zero(T)
         else
-            R, D, var = CartesianIndices(S), StructureFunction(A), diag(A)
+            R, D, var = CartesianIndices(S), A.func, A.diag
             Δr = R[i] - R[j]
             ((var[i] + var[j]) - D(Δr))/2
         end
@@ -356,7 +365,7 @@ end
 @inline function Base.getindex(A::LazyCovariance{T,N},
                                i::CartesianIndex{N},
                                j::CartesianIndex{N}) where {T,N}
-    S = support(A)
+    S = A.support
     @boundscheck (checkbounds(Bool, S, i) & checkbounds(Bool, S, j)) ||
         throw(BoundsError(A, (i,j)))
     @inbounds begin
@@ -364,8 +373,8 @@ end
             zero(T)
         else
             Δr = i - j
-            D = StructureFunction(A)
-            var = diag(A)
+            D = A.func
+            var = A.diag
             ((var[i] + var[j]) - D(Δr))/2
         end
     end
@@ -383,18 +392,29 @@ function is `f` over a support defined by `S` and whose piston mode has a
 standard deviation of `σ`. Indices `i` and `j` are linear indices in the range
 `1:nnz` with `nnz` the number of non-zeros in the support `S`.
 
-"""
+The fields of a shrinked lazy covariance object `Cov` may be retrieved by the
+`Cov.key` syntax or via getters:
+
+    Cov.func    # yields the structure function
+    Cov.support # yields the normalized support
+    Cov.mask    # yields the boolean support
+    Cov.indices # yields the Cartesian indices of the diagonal entries
+    Cov.diag    # yields the diagonal entries, also non-uniform variances
+    diag(Cov)   # idem.
+    var(Cov)    # idem.
+
+ """
 struct ShrinkedLazyCovariance{T<:AbstractFloat,N,
                               F<:StructureFunction{T},
                               S<:AbstractArray{T,N},
                               M<:AbstractArray{Bool,N},
                               I<:AbstractVector{<:CartesianIndex{N}},
                               D<:AbstractVector{T}} <: AbstractMatrix{T}
-    sf::F   # structure function
-    sup::S  # normalized support
-    mask::M # boolean support
-    inds::I # linear index in variance -> Cartesian index in support
-    diag::D # diagonal entries, also non-uniform variances
+    func::F     # structure function
+    support::S  # normalized support
+    mask::M     # boolean support
+    indices::I  # linear index in variance -> Cartesian index in support
+    diag::D     # diagonal entries, also non-uniform variances
     function ShrinkedLazyCovariance(sf::F, sup::S, mask::M, inds::I,
                                     diag::D) where {T<:AbstractFloat,N,
                                                     F<:StructureFunction{T},
@@ -408,7 +428,7 @@ struct ShrinkedLazyCovariance{T<:AbstractFloat,N,
 end
 
 check_struct(A::ShrinkedLazyCovariance) = check_struct(
-    ShrinkedLazyCovariance, StructureFunction(A), support(A), mask(A), indices(A), diag(A))
+    ShrinkedLazyCovariance, A.func, A.support, A.mask, A.indices, A.diag)
 
 function check_struct(::Type{<:ShrinkedLazyCovariance},
                       sf::F, sup::S, mask::M, inds::I,
@@ -447,10 +467,7 @@ function check_struct(::Type{<:ShrinkedLazyCovariance},
     nothing
 end
 
-StructureFunction(A::ShrinkedLazyCovariance) = A.sf
-support(A::ShrinkedLazyCovariance) = A.sup
-mask(A::ShrinkedLazyCovariance) = A.mask
-indices(A::ShrinkedLazyCovariance) = A.inds
+StructureFunction(A::ShrinkedLazyCovariance) = A.func
 diag(A::ShrinkedLazyCovariance) = A.diag
 var(A::ShrinkedLazyCovariance) = diag(A)
 
@@ -461,7 +478,7 @@ function ShrinkedLazyCovariance(f::StructureFunction{T},
 end
 
 function ShrinkedLazyCovariance(A::LazyCovariance{T,N})  where {T<:AbstractFloat,N}
-    f, S = StructureFunction(A), support(A)
+    f, S = A.func, A.support
     nnz = countnz(S)
     inds = Vector{CartesianIndex{N}}(undef, nnz)
     mask = similar(S, Bool)
@@ -482,25 +499,25 @@ end
 
 # Implement abstract array API.
 Base.length(A::ShrinkedLazyCovariance) = begin
-    n = length(indices(A))
+    n = length(A.indices)
     return n^2
 end
 Base.size(A::ShrinkedLazyCovariance) = begin
-    n = length(indices(A))
+    n = length(A.indices)
     return (n, n)
 end
 Base.axes(A::ShrinkedLazyCovariance) = begin
-    r = axes(indices(A))
+    r = axes(A.indices)
     return (r..., r...)
 end
 Base.IndexStyle(::ShrinkedLazyCovariance) = IndexCartesian()
 
 @inline function Base.getindex(A::ShrinkedLazyCovariance, i::Int, j::Int)
-    var = diag(A)
+    var = A.diag
     @boundscheck (checkbounds(Bool, var, i) & checkbounds(Bool, var, j)) ||
         throw(BoundsError(A, (i, j)))
     @inbounds begin
-        R, D = indices(A), StructureFunction(A)
+        R, D = A.indices, A.func
         Δr = R[i] - R[j]
         cov = ((var[i] + var[j]) - D(Δr))/2
     end
@@ -531,11 +548,6 @@ An empirical structure function object `A` has the following properties:
 Base methods `values(A)` and `valtype(A)` yield the integrated values and their
 type for the sampled structure function `A`.
 
-Unexported methods `StructureFunctions.support(A)`,
-`StructureFunctions.weights(A)`, and `StructureFunctions.nobs(A)` yield the
-support, the integrated weights, and the number of observations for the sampled
-structure function `A`.
-
 """
 mutable struct EmpiricalStructureFunction{T<:AbstractFloat,N,
                                           S<:AbstractArray{T,N},
@@ -550,9 +562,11 @@ Base.valtype(A::EmpiricalStructureFunction) = valtype(typeof(A))
 Base.valtype(::Type{<:EmpiricalStructureFunction{T}}) where {T} = T
 Base.values(A::EmpiricalStructureFunction) = A.values
 
-support(A::EmpiricalStructureFunction) = A.support
-weights(A::EmpiricalStructureFunction) = A.weights
-nobs(A::EmpiricalStructureFunction) = A.nobs
+# Make properties read-only.
+@inline Base.getproperty(A::EmpiricalStructureFunction, f::Symbol) = getfield(A, f)
+Base.setproperty!(A::EmpiricalStructureFunction, f::Symbol) = error(
+    "attempt to ", (f ∈ propertynames(A) ? "modify read-only" : "access non-existing"),
+    " property `$f`")
 
 EmpiricalStructureFunction(S::AbstractArray{T,N}) where {T,N} =
     EmpiricalStructureFunction{float(T)}(S)
@@ -569,7 +583,7 @@ end
 function Base.push!(A::EmpiricalStructureFunction{T,N},
                     x::Union{AbstractArray{<:Real,N},
                              AbstractVector{<:Real}}) where {T,N}
-    S = support(A)
+    S = A.support
     if x isa AbstractArray{<:Real,N} && axes(x) == axes(S)
         # Assume x is for all the nodes, inside and outside the support.
         unsafe_update!(Val(:full), A, x)
@@ -579,14 +593,14 @@ function Base.push!(A::EmpiricalStructureFunction{T,N},
     else
         throw(DimensionMismatch("incompatible dimensions/indices"))
     end
-    A.nobs += 1
+    setfield!(A, :nobs, A.nobs + 1)
     return A
 end
 
 function unsafe_update!(::Val{:full},
                         A::EmpiricalStructureFunction{T,N},
                         x::AbstractArray{<:Real,N}) where {T,N}
-    S = support(A)
+    S = A.support
     R = CartesianIndices(S)
     @inbounds for r in R
         S_r = S[r]
@@ -605,7 +619,7 @@ end
 function unsafe_update!(::Val{:sparse},
                         A::EmpiricalStructureFunction{T,N},
                         x::AbstractVector{<:Real}) where {T,N}
-    S = support(A)
+    S = A.support
     R = CartesianIndices(S)
     i = 0
     @inbounds for r in R
@@ -627,10 +641,15 @@ end
                                 Δr::CartesianIndex{N},
                                 wgt::T,
                                 val::T) where {T, N}
-    wgts = weights(A)
-    vals = values(A)
+    wgts = A.weights
+    vals = A.values
     vals[Δr] = (wgts[Δr]*vals[Δr] + wgt*val)/(wgts[Δr] + wgt)
     wgts[Δr] += wgt
+end
+
+# Provide list of (public) properties.
+for T in (LazyCovariance, ShrinkedLazyCovariance, EmpiricalStructureFunction)
+    @eval Base.propertynames(::$T) = $(Tuple(fieldnames(T)))
 end
 
 # Check that an array can be quickly indexed by 1-based linear indices.
