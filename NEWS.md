@@ -9,3 +9,5 @@
   public properties to favor using the `A.f` syntax.
 
 - Empirical structure function object is an abstract array (with offsets).
+
+- A demonstration is provided in `test/demo.jl`.
