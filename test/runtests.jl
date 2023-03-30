@@ -1,7 +1,8 @@
 module TestingStructureFunctions
 
+using Test, Statistics, LinearAlgebra
 using StructureFunctions
-using Test, Statistics
+using StructureFunctions: LazyCovariance, ShrinkedLazyCovariance
 
 @testset "StructureFunctions.jl" begin
     f = KolmogorovStructFunc(1.2)
@@ -20,16 +21,37 @@ using Test, Statistics
     nnz = count(x -> x > zero(x), S)
     @test sum(StructureFunctions.normalize_support(Float64, S)) ≈ 1
 
-    # Covariance matrix.
+    # Full covariance matrices.
     C = cov(f, S)
     @test size(C) == (n, n)
-    @test C == C'
-    C = cov(f, S, 0.1)
+    @test C == C' # is matrix symmetric?
+    σ = 0.1
+    C = cov(f, S, σ)
     @test size(C) == (n, n)
-    @test C == C'
-    C = cov(f, S; shrink=true)
+    @test C == C' # is matrix symmetric?
+    LC = LazyCovariance(f, S, σ)
+    @test size(LC) == (n,n)
+    @test axes(LC) === map(Base.OneTo, size(LC))
+    @test LC ≈ C
+    @test diag(LC) === var(LC)
+    R = CartesianIndices(S)
+    flag = true # to test different kinds of indices
+    for (i,r) in enumerate(R)
+        for (i′,r′) in enumerate(R)
+            flag &= LC[i,i′] == LC[r,r′]
+        end
+    end
+    @test flag
+
+    # Shrinked covariance matrices.
+    C = cov(f, S, σ; shrink=true)
     @test size(C) == (nnz, nnz)
-    @test C == C'
+    @test C == C' # is matrix symmetric?
+    LC = ShrinkedLazyCovariance(f, S, σ)
+    @test size(LC) == (nnz,nnz)
+    @test axes(LC) === map(Base.OneTo, size(LC))
+    @test LC ≈ C
+    @test diag(LC) === var(LC)
 
     # Sampled Structure function.
     A =  SampledStructureFunction(S)

@@ -4,11 +4,12 @@ export
     KolmogorovStructFunc,
     SampledStructureFunction,
     StructureFunction,
-    cov
+    cov, var, diag
 
-using AsType, OffsetArrays, Statistics
+using AsType, OffsetArrays
 
-import Statistics: cov
+import Statistics: cov, var
+import LinearAlgebra: diag
 
 """
     StructureFunction{T}
@@ -71,7 +72,7 @@ for type in (:StructureFunction, :KolmogorovStructFunc)
 end
 
 """
-    normalize_support(T<:AbstractFloat, S)
+    StructureFunctions.normalize_support(T<:AbstractFloat, S)
 
 yields a normalized support function with elements of floating-point type `T`
 given the sampled support function `S` not necessarily normalized and throwing
@@ -79,37 +80,140 @@ an error if `S` has invalid (e.g., negative) values. The result is an array of
 nonnegative values of type `T` and whose sum is equal to 1.
 
 """
-function normalize_support(::Type{T}, S::AbstractMatrix) where {T<:AbstractFloat}
-    # Check support function and compute normalization factor q = 1/sum(S).
-    s = zero(T)
-    flag = true
-    @inbounds @simd for i in eachindex(S)
-        S_i = as(T, S[i])
-        flag &= (S_i ≥ zero(S_i))
-        s += S_i
-    end
-    flag || throw(ArgumentError("support function must be nonnegative everywhere"))
-    s > zero(s) || throw(ArgumentError("support function must have some nonzeros"))
-    q = one(s)/s
-
+function normalize_support(::Type{T}, S::AbstractArray{<:Real}) where {T<:AbstractFloat}
     # Build the normalized support function.
+    q = one(T)/as(T, check_support(S))
     R = similar(S, T)
-    @inbounds @simd for i in eachindex(R, S)
-        R[i] = q*as(T, S[i])
+    if eltype(S) === Bool
+        @inbounds @simd for i in eachindex(R, S)
+            R[i] = ifelse(S[i], q, zero(T))
+        end
+    else
+        @inbounds @simd for i in eachindex(R, S)
+            R[i] = q*as(T, S[i])
+        end
     end
     return R
+end
+
+"""
+    StructureFunctions.check_support(S)
+
+yields the sum of values in `S` throwing an exception is `S` is not valid to
+specify a support.
+
+"""
+function check_support(S::AbstractArray{X}) where {X<:Real}
+    if X <: Bool
+        s = countnz(S)
+    else
+        T = promote_type(Float64, X)
+        s = zero(T)
+        flag = true
+        @inbounds @simd for i in eachindex(S)
+            S_i = S[i]
+            flag &= (S_i ≥ zero(S_i))
+            s += oftype(s, S_i)
+        end
+        flag || throw(ArgumentError("support function must be nonnegative everywhere"))
+    end
+    s > zero(s) || throw(ArgumentError("support function must have some nonzeros"))
+    return s
+end
+
+"""
+    StructureFunctions.countnz(S)
+
+yields the number of non-zeros in array `S`.
+
+"""
+function countnz(S::AbstractArray)
+    nnz = 0 # to count number of non-zeros
+    @inbounds @simd for i in eachindex(S)
+        nnz += iszero(S[i]) ? 0 : 1
+    end
+    return nnz
+end
+
+"""
+    var(f, S, σ=0) -> V
+
+yields the non-uniform variance `V` of a random field having a structure
+function `f` on a support `S` and a piston mode with standard deviation `σ`.
+The covariance between two nodes of Cartesian coordinates `r` and `r′` is then
+given by:
+
+    Cov(r,r′) = (V[r] + V[r′] - f(r - r′))/2
+
+if `S[r]` and `S[r′]` are both non-zero, the covariance being zero otherwise.
+
+"""
+function var(f::StructureFunction{T},
+             S::AbstractArray{X},
+             σ::Real = zero(T)) where {T<:AbstractFloat,X<:Real}
+    # Check piston variance.
+    σ ≥ zero(σ) || throw(ArgumentError("piston variance must be nonnegative"))
+    σ² = as(T, σ)^2
+
+    # Check support and compute normalization factor.
+    q = as(T, check_support(S))
+
+    # Pre-compute K(r) = ∫f(r - r′)⋅S(r′)⋅dr′
+    R = CartesianIndices(S)
+    K = similar(S, T)
+    @inbounds for r ∈ R
+        S_r = S[r]
+        if iszero(S_r)
+            K[r] = zero(T)
+        else
+            s = zero(T)
+            if X <: Bool
+                for r′ ∈ R
+                    S_r′ = S[r′]
+                    iszero(S_r′) && continue
+                    s += oftype(s, f(r - r′))
+                end
+            else
+                for r′ ∈ R
+                    S_r′ = S[r′]
+                    iszero(S_r′) && continue
+                    s += oftype(s, f(r - r′))*oftype(s, S_r′)
+                end
+            end
+            K[r] = s/q
+        end
+    end
+
+    # Compute c0 = σ^2 - (1/2)⋅∫K(r)⋅S(r)⋅dr
+    s = zero(T)
+    if eltype(S) === Bool
+        @inbounds @simd for i in eachindex(K, S)
+            s += K[i]
+        end
+    else
+        @inbounds @simd for i in eachindex(K, S)
+            s += K[i]*oftype(s, S[i])
+        end
+    end
+    c0 = σ² - s/2q
+
+    # Overwrite K with the variance.
+    @inbounds @simd for i in eachindex(K)
+        K[i] = ifelse(iszero(K[i]), zero(T), K[i] + c0)
+    end
+
+    return K
 end
 
 """
     cov(f::StructureFunction, S, σ=0; shrink=false) -> C
 
 yields the covariance of a random field whose structure function is `f` over an
-support defined `S`. The range of indices to consider for the random field is
-the same as that of `S` unless keyword `shrink` is true, in which case only the
-indices inside the support `S` are considered.
+support defined by `S` and whose piston mode has a standard deviation of `σ`.
 
-Optional argument `σ` is the standard deviation of an additional independent
-random piston.
+The range of indices to consider for the random field is the same as that of
+`S` unless keyword `shrink` is true, in which case only the indices inside the
+support `S` are considered.
 
 The result is a flattened `n×n` covariance matrix with `n = length(S)` if
 `shrink` is false, or `n` the number of non-zeros in the support `S` if
@@ -119,34 +223,14 @@ The implemented method is described in the notes accompanying this package.
 
 """
 function cov(f::StructureFunction{T},
-             S::AbstractArray,
+             S::AbstractArray{<:Real},
              σ::Real = zero(T);
              shrink::Bool = false) where {T<:AbstractFloat}
-    # Check support function and normalize it so that sum(S) = 1.
-    S = normalize_support(T, S)
-    σ² = as(T, σ)^2
-
-    # Pre-compute K(r) = ∫f(r - r′)⋅S(r′)⋅dr′
-    R = CartesianIndices(S)
-    K = similar(S, T)
-    @inbounds for r ∈ R
-        s = zero(T)
-        for r′ ∈ R
-            S_r′ = S[r′]
-            iszero(S_r′) && continue
-            s += oftype(s, f(r - r′)*S_r′)
-        end
-        K[r] = s
-    end
-
-    # Compute c0 = σ^2 - (1/2)⋅∫K(r)⋅S(r)⋅dr
-    s = zero(T)
-    @inbounds @simd for i in eachindex(K, S)
-        s += oftype(s, K[i]*S[i])
-    end
-    c0 = σ² - s/2
+    # Compute non-uniform variance.
+    V = var(f, S, σ)
 
     # Compute covariance.
+    R = CartesianIndices(S)
     if shrink
         nnz = countnz(S)
         C = Array{T}(undef, (nnz, nnz))
@@ -160,7 +244,7 @@ function cov(f::StructureFunction{T},
                 i′ += 1
                 if i ≤ i′
                     # Instantiate covariance.
-                    C[i′,i] = (K[r] + K[r′] - f(r - r′))/2 + c0
+                    C[i′,i] = ((V[r] + V[r′]) - f(r - r′))/2
                 else
                     # Avoid computations as C is symmetric.
                     C[i′,i] = C[i,i′]
@@ -176,7 +260,7 @@ function cov(f::StructureFunction{T},
                 iszero(S[r′]) && continue
                 if i ≤ i′
                     # Instantiate covariance.
-                    C[i′,i] = (K[r] + K[r′] - f(r - r′))/2 + c0
+                    C[i′,i] = ((V[r] + V[r′]) - f(r - r′))/2
                 else
                     # Avoid computations as C is symmetric.
                     C[i′,i] = C[i,i′]
@@ -187,12 +271,240 @@ function cov(f::StructureFunction{T},
     return C
 end
 
-function countnz(S::AbstractArray{T}) where {T}
-    nnz = 0 # to count number of non-zeros
-    @inbounds @simd for i in eachindex(S)
-        nnz += iszero(S[i]) ? 0 : 1
+"""
+    StructureFunctions.LazyCovariance(f, S, σ) -> Cov
+
+yields an object that can be used as:
+
+    Cov[i, j]
+
+to compute *on the fly* the covariance of a random field whose structure
+function is `f` over a support defined by `S` and whose piston mode has a
+standard deviation of `σ`. Indices `i` and `j` can be linear indices or
+Cartesian indices that must be valid to index `S`.
+
+"""
+struct LazyCovariance{T<:AbstractFloat,N,
+                      F<:StructureFunction{T},
+                      S<:AbstractArray{T,N},
+                      D<:AbstractArray{T,N}} <: AbstractMatrix{T}
+    sf::F   # structure function
+    sup::S  # normalized support
+    diag::D # diagonal entries, non-uniform variance
+
+    # The inner constructor is to ensure that arrays standard linear indexing
+    # and the the same axes.
+    function LazyCovariance(sf::F, sup::S, diag::D) where {T<:AbstractFloat,N,
+                                                           F<:StructureFunction{T},
+                                                           S<:AbstractArray{T,N},
+                                                           D<:AbstractArray{T,N}}
+        has_standard_linear_indexing(sup) || throw(ArgumentError(
+            "support array must have standard linear indexing"))
+        has_standard_linear_indexing(diag) || throw(ArgumentError(
+            "array of diagonal entries must have standard linear indexing"))
+        axes(sup) == axes(diag) || throw(DimensionMismatch(
+            "support and variance arrays have incompatible dimensions/indices"))
+        return new{T,N,F,S,D}(sf, sup, diag)
     end
-    return nnz
+end
+
+# Getters.
+StructureFunction(A::LazyCovariance) = A.sf
+support(A::LazyCovariance) = A.sup
+diag(A::LazyCovariance) = A.diag
+var(A::LazyCovariance) = diag(A)
+
+# Constructor.
+function LazyCovariance(f::StructureFunction{T},
+                        S::AbstractArray{<:Real,N},
+                        σ::Real = zero(T)) where {T<:AbstractFloat,N}
+    sup = normalize_support(T, S)
+    diag = var(f, S, σ)
+    return LazyCovariance(f, sup, diag)
+end
+
+# Implement abstract array API.
+Base.length(A::LazyCovariance) = begin
+    n = length(diag(A))
+    return n^2
+end
+Base.size(A::LazyCovariance) = begin
+    n = length(diag(A))
+    return (n, n)
+end
+Base.axes(A::LazyCovariance) = begin
+    r = Base.OneTo(length(diag(A)))
+    return (r, r)
+end
+Base.IndexStyle(::LazyCovariance) = IndexCartesian()
+
+@inline function Base.getindex(A::LazyCovariance{T}, i::Int, j::Int) where {T}
+    S = support(A)
+    @boundscheck (checkbounds(Bool, S, i) & checkbounds(Bool, S, j)) ||
+        throw(BoundsError(A, (i, j)))
+    @inbounds begin
+        if iszero(S[i]) | iszero(S[j])
+            zero(T)
+        else
+            R, D, var = CartesianIndices(S), StructureFunction(A), diag(A)
+            Δr = R[i] - R[j]
+            ((var[i] + var[j]) - D(Δr))/2
+        end
+    end
+end
+
+@inline function Base.getindex(A::LazyCovariance{T,N},
+                               i::CartesianIndex{N},
+                               j::CartesianIndex{N}) where {T,N}
+    S = support(A)
+    @boundscheck (checkbounds(Bool, S, i) & checkbounds(Bool, S, j)) ||
+        throw(BoundsError(A, (i,j)))
+    @inbounds begin
+        if iszero(S[i]) | iszero(S[j])
+            zero(T)
+        else
+            Δr = i - j
+            D = StructureFunction(A)
+            var = diag(A)
+            ((var[i] + var[j]) - D(Δr))/2
+        end
+    end
+end
+
+"""
+    StructureFunctions.ShrinkedLazyCovariance(f, S, σ) -> Cov
+
+yields an object that can be used as:
+
+    Cov[i,j]
+
+to compute *on the fly* the covariance of a random field whose structure
+function is `f` over a support defined by `S` and whose piston mode has a
+standard deviation of `σ`. Indices `i` and `j` are linear indices in the range
+`1:nnz` with `nnz` the number of non-zeros in the support `S`.
+
+"""
+struct ShrinkedLazyCovariance{T<:AbstractFloat,N,
+                              F<:StructureFunction{T},
+                              S<:AbstractArray{T,N},
+                              M<:AbstractArray{Bool,N},
+                              I<:AbstractVector{<:CartesianIndex{N}},
+                              D<:AbstractVector{T}} <: AbstractMatrix{T}
+    sf::F   # structure function
+    sup::S  # normalized support
+    mask::M # boolean support
+    inds::I # linear index in variance -> Cartesian index in support
+    diag::D # diagonal entries, also non-uniform variances
+    function ShrinkedLazyCovariance(sf::F, sup::S, mask::M, inds::I,
+                                    diag::D) where {T<:AbstractFloat,N,
+                                                    F<:StructureFunction{T},
+                                                    I<:AbstractVector{<:CartesianIndex{N}},
+                                                    S<:AbstractArray{T,N},
+                                                    M<:AbstractArray{Bool,N},
+                                                    D<:AbstractVector{T}}
+        check_struct(ShrinkedLazyCovariance, sf, sup, mask, inds, diag)
+        return new{T,N,F,S,M,I,D}(sf, sup, mask, inds, diag)
+    end
+end
+
+check_struct(A::ShrinkedLazyCovariance) = check_struct(
+    ShrinkedLazyCovariance, StructureFunction(A), support(A), mask(A), indices(A), diag(A))
+
+function check_struct(::Type{<:ShrinkedLazyCovariance},
+                      sf::F, sup::S, mask::M, inds::I,
+                      diag::D) where {T<:AbstractFloat,N,
+                                      F<:StructureFunction{T},
+                                      I<:AbstractVector{<:CartesianIndex{N}},
+                                      S<:AbstractArray{T,N},
+                                      M<:AbstractArray{Bool,N},
+                                      D<:AbstractVector{T}}
+    has_standard_linear_indexing(inds) || throw(ArgumentError(
+        "vector of indices must have standard linear indexing"))
+    has_standard_linear_indexing(diag) || throw(ArgumentError(
+        "vector of diagonal entries must have standard linear indexing"))
+    axes(inds) == axes(diag) || throw(DimensionMismatch(
+        "vectors of indices and diagonal entries have incompatible dimensions/indices"))
+    axes(sup) == axes(mask) || throw(DimensionMismatch(
+        "support and mask arrays have incompatible dimensions/indices"))
+    j = 0
+    R = CartesianIndices(sup)
+    @inbounds for i in eachindex(sup, mask, R)
+        sup[i] ≥ zero(T)  || throw(ArgumentError(
+            "support must have nonnegative values"))
+        mask[i] === !iszero(sup[i]) || throw(ArgumentError(
+            "support and mask arrays disagree"))
+        if mask[i]
+            j += 1
+            checkbounds(Bool, inds, j) || throw(DimensionMismatch(
+                "indices have invalid number of entries"))
+            inds[j] == R[i] || throw(ArgumentError(
+                "indices have invalid values"))
+        end
+    end
+    j > 0 || throw(ArgumentError("support must have some non-zeros"))
+    length(inds) == j || throw(DimensionMismatch(
+        "indices have invalid number of entries"))
+    nothing
+end
+
+StructureFunction(A::ShrinkedLazyCovariance) = A.sf
+support(A::ShrinkedLazyCovariance) = A.sup
+mask(A::ShrinkedLazyCovariance) = A.mask
+indices(A::ShrinkedLazyCovariance) = A.inds
+diag(A::ShrinkedLazyCovariance) = A.diag
+var(A::ShrinkedLazyCovariance) = diag(A)
+
+function ShrinkedLazyCovariance(f::StructureFunction{T},
+                                S::AbstractArray{<:Real,N},
+                                σ::Real = zero(T)) where {T<:AbstractFloat,N}
+    return ShrinkedLazyCovariance(LazyCovariance(f, S, σ))
+end
+
+function ShrinkedLazyCovariance(A::LazyCovariance{T,N})  where {T<:AbstractFloat,N}
+    f, S = StructureFunction(A), support(A)
+    nnz = countnz(S)
+    inds = Vector{CartesianIndex{N}}(undef, nnz)
+    mask = similar(S, Bool)
+    @assert axes(mask) == axes(S)
+    diag = Vector{T}(undef, nnz)
+    i = 0
+    @inbounds for r in CartesianIndices(S)
+        inside = !iszero(S[r])
+        mask[r] = inside
+        if inside
+            i += 1
+            inds[i] = r
+            diag[i] = var(A)[r]
+        end
+    end
+    return ShrinkedLazyCovariance(f, S, mask, inds, diag)
+end
+
+# Implement abstract array API.
+Base.length(A::ShrinkedLazyCovariance) = begin
+    n = length(indices(A))
+    return n^2
+end
+Base.size(A::ShrinkedLazyCovariance) = begin
+    n = length(indices(A))
+    return (n, n)
+end
+Base.axes(A::ShrinkedLazyCovariance) = begin
+    r = axes(indices(A))
+    return (r..., r...)
+end
+Base.IndexStyle(::ShrinkedLazyCovariance) = IndexCartesian()
+
+@inline function Base.getindex(A::ShrinkedLazyCovariance, i::Int, j::Int)
+    var = diag(A)
+    @boundscheck (checkbounds(Bool, var, i) & checkbounds(Bool, var, j)) ||
+        throw(BoundsError(A, (i, j)))
+    @inbounds begin
+        R, D = indices(A), StructureFunction(A)
+        Δr = R[i] - R[j]
+        cov = ((var[i] + var[j]) - D(Δr))/2
+    end
+    return cov
 end
 
 """
@@ -313,5 +625,9 @@ end
     vals[Δr] = (wgts[Δr]*vals[Δr] + wgt*val)/(wgts[Δr] + wgt)
     wgts[Δr] += wgt
 end
+
+# Check that an array can be quickly indexed by 1-based linear indices.
+has_standard_linear_indexing(A::AbstractArray) =
+    IndexStyle(A) === IndexLinear() && firstindex(A) === 1
 
 end # module
