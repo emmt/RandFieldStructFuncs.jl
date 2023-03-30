@@ -597,7 +597,7 @@ Base.IndexStyle(::EmpiricalStructureFunction{T,N,S,A}) where {T,N,S,A} = IndexSt
     @inbounds vals[I...]
 end
 
-@inline function Base.setindex!(A::EmpiricalStructureFunction, x, I)
+@inline function Base.setindex!(A::EmpiricalStructureFunction, x, I::Vararg{Int})
     vals = A.values
     @boundscheck checkbounds(Bool, vals, I...) || throw(BoundsError(A, I...))
     @inbounds vals[I...] = x
