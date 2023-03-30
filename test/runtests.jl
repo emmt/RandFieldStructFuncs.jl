@@ -2,7 +2,7 @@ module TestingStructureFunctions
 
 using Test, Statistics, LinearAlgebra
 using StructureFunctions
-using StructureFunctions: LazyCovariance, ShrinkedLazyCovariance
+using StructureFunctions: LazyCovariance, PackedLazyCovariance
 
 @testset "StructureFunctions.jl" begin
     f = KolmogorovStructFunc(1.2)
@@ -43,11 +43,11 @@ using StructureFunctions: LazyCovariance, ShrinkedLazyCovariance
     end
     @test flag
 
-    # Shrinked covariance matrices.
-    C = cov(f, S, σ; shrink=true)
+    # Packed covariance matrices.
+    C = cov(f, S, σ; pack=true)
     @test size(C) == (nnz, nnz)
     @test C == C' # is matrix symmetric?
-    LC = ShrinkedLazyCovariance(f, S, σ)
+    LC = PackedLazyCovariance(f, S, σ)
     @test size(LC) == (nnz,nnz)
     @test axes(LC) === map(Base.OneTo, size(LC))
     @test LC ≈ C

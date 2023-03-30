@@ -207,18 +207,18 @@ function var(f::StructureFunction{T},
 end
 
 """
-    cov(f::StructureFunction, S, σ=0; shrink=false) -> C
+    cov(f::StructureFunction, S, σ=0; pack=false) -> C
 
 yields the covariance of a random field whose structure function is `f` over an
 support defined by `S` and whose piston mode has a standard deviation of `σ`.
 
 The range of indices to consider for the random field is the same as that of
-`S` unless keyword `shrink` is true, in which case only the indices inside the
+`S` unless keyword `pack` is true, in which case only the indices inside the
 support `S` are considered.
 
 The result is a flattened `n×n` covariance matrix with `n = length(S)` if
-`shrink` is false, or `n` the number of non-zeros in the support `S` if
-`shrink` is true.
+`pack` is false, or `n` the number of non-zeros in the support `S` if
+`pack` is true.
 
 The implemented method is described in the notes accompanying this package.
 
@@ -226,13 +226,13 @@ The implemented method is described in the notes accompanying this package.
 function cov(f::StructureFunction{T},
              S::AbstractArray{<:Real},
              σ::Real = zero(T);
-             shrink::Bool = false) where {T<:AbstractFloat}
+             pack::Bool = false) where {T<:AbstractFloat}
     # Compute non-uniform variance.
     V = var(f, S, σ)
 
     # Compute covariance.
     R = CartesianIndices(S)
-    if shrink
+    if pack
         nnz = countnz(S)
         C = Array{T}(undef, (nnz, nnz))
         i = 0
@@ -381,7 +381,7 @@ end
 end
 
 """
-    StructureFunctions.ShrinkedLazyCovariance(f, S, σ) -> Cov
+    StructureFunctions.PackedLazyCovariance(f, S, σ) -> Cov
 
 yields an object that can be used as:
 
@@ -392,7 +392,7 @@ function is `f` over a support defined by `S` and whose piston mode has a
 standard deviation of `σ`. Indices `i` and `j` are linear indices in the range
 `1:nnz` with `nnz` the number of non-zeros in the support `S`.
 
-The fields of a shrinked lazy covariance object `Cov` may be retrieved by the
+The fields of a packed lazy covariance object `Cov` may be retrieved by the
 `Cov.key` syntax or via getters:
 
     Cov.func    # yields the structure function
@@ -404,33 +404,33 @@ The fields of a shrinked lazy covariance object `Cov` may be retrieved by the
     var(Cov)    # idem.
 
  """
-struct ShrinkedLazyCovariance{T<:AbstractFloat,N,
-                              F<:StructureFunction{T},
-                              S<:AbstractArray{T,N},
-                              M<:AbstractArray{Bool,N},
-                              I<:AbstractVector{<:CartesianIndex{N}},
-                              D<:AbstractVector{T}} <: AbstractMatrix{T}
+struct PackedLazyCovariance{T<:AbstractFloat,N,
+                            F<:StructureFunction{T},
+                            S<:AbstractArray{T,N},
+                            M<:AbstractArray{Bool,N},
+                            I<:AbstractVector{<:CartesianIndex{N}},
+                            D<:AbstractVector{T}} <: AbstractMatrix{T}
     func::F     # structure function
     support::S  # normalized support
     mask::M     # boolean support
     indices::I  # linear index in variance -> Cartesian index in support
     diag::D     # diagonal entries, also non-uniform variances
-    function ShrinkedLazyCovariance(sf::F, sup::S, mask::M, inds::I,
-                                    diag::D) where {T<:AbstractFloat,N,
-                                                    F<:StructureFunction{T},
-                                                    I<:AbstractVector{<:CartesianIndex{N}},
-                                                    S<:AbstractArray{T,N},
-                                                    M<:AbstractArray{Bool,N},
-                                                    D<:AbstractVector{T}}
-        check_struct(ShrinkedLazyCovariance, sf, sup, mask, inds, diag)
+    function PackedLazyCovariance(sf::F, sup::S, mask::M, inds::I,
+                                  diag::D) where {T<:AbstractFloat,N,
+                                                  F<:StructureFunction{T},
+                                                  I<:AbstractVector{<:CartesianIndex{N}},
+                                                  S<:AbstractArray{T,N},
+                                                  M<:AbstractArray{Bool,N},
+                                                  D<:AbstractVector{T}}
+        check_struct(PackedLazyCovariance, sf, sup, mask, inds, diag)
         return new{T,N,F,S,M,I,D}(sf, sup, mask, inds, diag)
     end
 end
 
-check_struct(A::ShrinkedLazyCovariance) = check_struct(
-    ShrinkedLazyCovariance, A.func, A.support, A.mask, A.indices, A.diag)
+check_struct(A::PackedLazyCovariance) = check_struct(
+    PackedLazyCovariance, A.func, A.support, A.mask, A.indices, A.diag)
 
-function check_struct(::Type{<:ShrinkedLazyCovariance},
+function check_struct(::Type{<:PackedLazyCovariance},
                       sf::F, sup::S, mask::M, inds::I,
                       diag::D) where {T<:AbstractFloat,N,
                                       F<:StructureFunction{T},
@@ -467,17 +467,17 @@ function check_struct(::Type{<:ShrinkedLazyCovariance},
     nothing
 end
 
-StructureFunction(A::ShrinkedLazyCovariance) = A.func
-diag(A::ShrinkedLazyCovariance) = A.diag
-var(A::ShrinkedLazyCovariance) = diag(A)
+StructureFunction(A::PackedLazyCovariance) = A.func
+diag(A::PackedLazyCovariance) = A.diag
+var(A::PackedLazyCovariance) = diag(A)
 
-function ShrinkedLazyCovariance(f::StructureFunction{T},
-                                S::AbstractArray{<:Real,N},
-                                σ::Real = zero(T)) where {T<:AbstractFloat,N}
-    return ShrinkedLazyCovariance(LazyCovariance(f, S, σ))
+function PackedLazyCovariance(f::StructureFunction{T},
+                              S::AbstractArray{<:Real,N},
+                              σ::Real = zero(T)) where {T<:AbstractFloat,N}
+    return PackedLazyCovariance(LazyCovariance(f, S, σ))
 end
 
-function ShrinkedLazyCovariance(A::LazyCovariance{T,N})  where {T<:AbstractFloat,N}
+function PackedLazyCovariance(A::LazyCovariance{T,N})  where {T<:AbstractFloat,N}
     f, S = A.func, A.support
     nnz = countnz(S)
     inds = Vector{CartesianIndex{N}}(undef, nnz)
@@ -494,25 +494,25 @@ function ShrinkedLazyCovariance(A::LazyCovariance{T,N})  where {T<:AbstractFloat
             diag[i] = var(A)[r]
         end
     end
-    return ShrinkedLazyCovariance(f, S, mask, inds, diag)
+    return PackedLazyCovariance(f, S, mask, inds, diag)
 end
 
 # Implement abstract array API.
-Base.length(A::ShrinkedLazyCovariance) = begin
+Base.length(A::PackedLazyCovariance) = begin
     n = length(A.indices)
     return n^2
 end
-Base.size(A::ShrinkedLazyCovariance) = begin
+Base.size(A::PackedLazyCovariance) = begin
     n = length(A.indices)
     return (n, n)
 end
-Base.axes(A::ShrinkedLazyCovariance) = begin
+Base.axes(A::PackedLazyCovariance) = begin
     r = axes(A.indices)
     return (r..., r...)
 end
-Base.IndexStyle(::ShrinkedLazyCovariance) = IndexCartesian()
+Base.IndexStyle(::PackedLazyCovariance) = IndexCartesian()
 
-@inline function Base.getindex(A::ShrinkedLazyCovariance, i::Int, j::Int)
+@inline function Base.getindex(A::PackedLazyCovariance, i::Int, j::Int)
     var = A.diag
     @boundscheck (checkbounds(Bool, var, i) & checkbounds(Bool, var, j)) ||
         throw(BoundsError(A, (i, j)))
@@ -648,7 +648,7 @@ end
 end
 
 # Provide list of (public) properties.
-for T in (LazyCovariance, ShrinkedLazyCovariance, EmpiricalStructureFunction)
+for T in (LazyCovariance, PackedLazyCovariance, EmpiricalStructureFunction)
     @eval Base.propertynames(::$T) = $(Tuple(fieldnames(T)))
 end
 
