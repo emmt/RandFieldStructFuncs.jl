@@ -7,6 +7,10 @@ jobs:
   CompatHelper:
     runs-on: ubuntu-latest
     steps:
+      - name: Add registries
+        run: julia -e 'import Pkg;
+                       Pkg.Registry.add(Pkg.RegistrySpec("General"));
+                       Pkg.Registry.add(Pkg.RegistrySpec(url = "https://github.com/emmt/EmmtRegistry"));'
       - name: Pkg.add("CompatHelper")
         run: julia -e 'using Pkg; Pkg.add("CompatHelper")'
       - name: CompatHelper.main()
