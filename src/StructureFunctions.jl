@@ -57,7 +57,7 @@ end
 
 # Outer constructors.
 KolmogorovStructFunc{T}(r0::Real) where {T<:AbstractFloat} = KolmogorovStructFunc{T}(as(T, r0))
-KolmogorovStructFunc(r0::T) where {T<:AbstractFloat} = KolmogorovStructFunc{T}(r0)
+KolmogorovStructFunc(r0::Real) = KolmogorovStructFunc{float(typeof(r0))}(r0)
 
 # Conversions.
 KolmogorovStructFunc(Dᵩ::KolmogorovStructFunc) = Dᵩ
