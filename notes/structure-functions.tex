@@ -12,8 +12,14 @@
 \begin{document}
 \title{Structure Function and Covariance}
 \author {Éric Thiébaut}
-\date{1st version: March 10, 2023; last version: March 28, 2023}
+\date{1st version: March 10, 2023; last revision: July 3, 2023}
 \maketitle
+
+\abstract{This note describes how to express the covariance $\Cov_{\varphi}$ of
+  a Gaussian random field $\varphi \sim \mathcal{N}(0, \Cov_{\varphi})$ given
+  the structure function $D_{\varphi}$ of $\varphi$ and the standard deviation
+  $\sigma$ of the \emph{piston} over a finite support $\mathcal{V}$. The
+  covariance $\Cov_{\varphi}$ is invertible if $\sigma \not= 0$.}
 
 \section{Structure function of a random field}
 
@@ -33,8 +39,8 @@ even function:
   D_{\phi}(-\Delta r) =  D_{\phi}(\Delta r).
 \end{equation}
 
-Developping the expression of the field structure function and assuming
-$\langle\phi(r)\rangle = 0$ yields:
+Developping the expression of the field structure function and assuming that
+$\phi(r)$ is centered $\forall r$, i.e.\ $\langle\phi(r)\rangle = 0$, yields:
 \begin{align}
   D_{\phi}(\Delta r)
   %&= \langle(\phi(r) - \phi(r+\Delta r))^{2}\rangle \notag \\
@@ -42,7 +48,7 @@ $\langle\phi(r)\rangle = 0$ yields:
     - 2\,\langle\phi(r)\,\phi(r+\Delta r)\rangle\notag \\
   &= \Var_{\phi}(r) + \Var_{\phi}(r + \Delta r) - 2 \Cov_{\phi}(r, r + \Delta r)
 \end{align}
-where $\Cov_{\phi}(r,r')$ is the spatial covariance of the field defined by:
+where $\Cov_{\phi}(r,r')$ is the spatial covariance of the field given by:
 \begin{align}
   \Cov_{\phi}(r,r')
   &= \langle\phi(r)\,\phi(r')\rangle
@@ -67,8 +73,8 @@ defined by ($\forall r \in \mathcal{V}$):
 \end{align}
 with $|\mathcal{V}|=\int_{\mathcal{V}}\mathrm{d}r$ the volume of $\mathcal{V}$.
 
-Introducing the support function\footnote{so-called \emph{pupil function} in
-  optics} $S(r)$ such that for any function $f(r)$:
+Introducing the scaled support function\footnote{so-called scaled \emph{pupil
+    function} in optics} $S(r)$ such that for any function $f(r)$:
 \begin{align}
   \label{eq:S-def}
   \int f(r)\,S(r)\,\mathrm{d}r = \frac{1}{|\mathcal{V}|} \int_{\mathcal{V}} f(r)\,\mathrm{d}r,
@@ -78,15 +84,16 @@ the de-pistoned field writes:
   \psi(r) = \phi(r) - \int \phi(r')\,S(r')\,\mathrm{d}r'.
 \end{align}
 
-A property of the support function is that:
+A property of the scaled support function is that:
 \begin{align}
   \int S(r)\,\mathrm{d}r = 1,
 \end{align}
 which directly follows from Eq.~\eqref{eq:S-def} by taking $f(r) = 1$ whatever $r$.
 
-Obviously, the structure functions of the field $\phi(r)$ and of the de-pistoned
-field $\psi(r)$ are the same\footnote{except for the restriction that
-  $\Delta r$ must fit inside $\mathcal{V}$}.
+Obviously, the structure functions of the field $\phi(r)$ and of the
+de-pistoned field $\psi(r)$ are the same, except for the restriction that
+$\Delta r$ must fit inside $\mathcal{V}$ for the structure function of the
+de-pistoned field.
 
 By linearity and since the field is centered and the aperture finite, the
 de-pistoned field is also centered.
@@ -142,8 +149,8 @@ in Eq.~\eqref{eq:Cov-psi-1} yields:
   &\quad - \frac{1}{2}\,\iint D_{\phi}(r'' - r''')\,S(r'')\,\mathrm{d}r''\,S(r''')\,\mathrm{d}r'''.
     \label{eq:Cov-psi-4}
 \end{align}
-Hence the covariance of the de-pistoned field only depends on the field
-structure function.
+Hence the covariance of the de-pistoned field only depends on the structure
+function of the field.
 
 To quickly compute $\Cov_{\psi}(r,r')$, it is advantageous to introduce:
 \begin{subequations}
@@ -152,7 +159,7 @@ To quickly compute $\Cov_{\psi}(r,r')$, it is advantageous to introduce:
     V_{\psi}(r) = K_{\phi}(r)
     - \frac{1}{2}\,\int K_{\phi}(r')\,S(r')\,\mathrm{d}r',
   \end{equation}
-  with
+  with:
   \begin{equation}
     \label{eq:K-phi}
     K_{\phi}(r) = \int D_{\phi}(r - r')\,S(r')\,\mathrm{d}r',
@@ -184,21 +191,28 @@ $\psi(r)$ yields the field ($\forall r \in \mathcal{V}$):
   \label{eq:varphi-def}
   \varphi(r) = \psi(r) + \alpha,
 \end{align}
-which has an invertible covariance\footnote{provided $\sigma \not= 0$}. Since
-$\alpha$ and $\psi(r)$ are mutually independent (whatever $r$), the covariance
-of the field $\varphi(r)$ is easy to compute:
+which has an invertible covariance provided $\sigma \not= 0$. Since $\alpha$
+and $\psi(r)$ are mutually independent whatever $r$, the covariance of the
+field $\varphi(r)$ is trivial to compute:
 \begin{align}
   \Cov_{\varphi}(r,r')
   &= \Cov_{\psi}(r,r') + \sigma^{2} \notag\\
   &= \frac{1}{2}\,\left[
-      V_{\varphi}(r) + V_{\varphi}(r') - D_{\phi}(r - r')
+      V_{\varphi}(r) + V_{\varphi}(r') - D_{\varphi}(r - r')
     \right],
   \label{eq:Cov-varphi}
 \end{align}
-with:
+where $D_{\varphi} = D_{\phi}$ the structure function of $\varphi$ and with:
 \begin{equation}
   \label{eq:Var-varphi}
-  V_{\varphi}(r) = \Var_{\varphi}(r) = V_{\psi}(r) + \sigma^{2}.
+  V_{\varphi}(r) = \Var_{\varphi}(r) = V_{\psi}(r) + \sigma^{2}
 \end{equation}
+its variance.
+
+The random field $\varphi(r)$ for $r \in \mathcal{V}$, is a centered Gaussian
+field whose covariance $\Cov_{\varphi}$ is given by Eqs.~\eqref{eq:Cov-varphi}
+and \eqref{eq:Var-varphi} and only depends on the structure function
+$D_{\varphi}$ of the field and on the standard deviation $\sigma$ of the
+piston. If $\sigma \not= 0$, the covariance $\Cov_{\varphi}$ is invertible.
 
 \end{document}
