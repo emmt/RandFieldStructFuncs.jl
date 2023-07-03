@@ -6,7 +6,7 @@ export
     StructureFunction,
     cov, var, diag
 
-using AsType, OffsetArrays
+using TypeUtils, OffsetArrays
 
 import Statistics: cov, var
 import LinearAlgebra: diag
