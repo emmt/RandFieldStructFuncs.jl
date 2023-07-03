@@ -17,9 +17,9 @@ import LinearAlgebra: diag
 is the abstract type of structure functions using floating-point type `T` for
 their computations.
 
-A structure function `f` of a random field `ϕ` is a callable object such that:
+A structure function `Dᵩ` of a random field `φ` is a callable object such that:
 
-    f(Δr) = ⟨[ϕ(r + Δr) - ϕ(r)]^2⟩
+    Dᵩ(Δr) = ⟨[φ(r + Δr) - φ(r)]^2⟩
 
 where `⟨…⟩` denotes expectation while `r` and `Δr` are Cartesian coordinates in
 units of the grid sampling step.
@@ -31,9 +31,9 @@ calling the structure function object with a tuple of coordinates.
 abstract type StructureFunction{T<:AbstractFloat} <: Function; end
 
 # convert Cartesian index. NOTE: Only works for Julia ≥ 1.3
-(f::StructureFunction)(r::CartesianIndex) = f(Tuple(r))
+(Dᵩ::StructureFunction)(r::CartesianIndex) = Dᵩ(Tuple(r))
 
-Base.convert(::Type{S}, f::S) where {S<:StructureFunction} = f
+Base.convert(::Type{S}, Dᵩ::S) where {S<:StructureFunction} = Dᵩ
 
 """
     KolmogorovStructFunc{T}(r0)
@@ -44,30 +44,30 @@ the grid sampling step).
 """
 struct KolmogorovStructFunc{T<:AbstractFloat} <: StructureFunction{T}
     r0::T
-    q::T  # to store precompte value of 1/r0^2
+    q::T  # to store precompted value of 1/r0^2
     KolmogorovStructFunc{T}(r0::T) where {T<:AbstractFloat} =
         new{T}(r0, one(T)/r0^2)
 end
 
 # Compute structure function.
-@inline (f::KolmogorovStructFunc{T})(r::NTuple{2,Real}) where {T<:AbstractFloat} = f(map(as(T), r))
+@inline (Dᵩ::KolmogorovStructFunc{T})(r::NTuple{2,Real}) where {T<:AbstractFloat} = Dᵩ(map(as(T), r))
 
-(f::KolmogorovStructFunc{T})(r::NTuple{2,T}) where {T<:AbstractFloat} =
-    as(T,6.88)*(f.q*(r[1]^2 + r[2]^2))^as(T,5/6)
+(Dᵩ::KolmogorovStructFunc{T})(r::NTuple{2,T}) where {T<:AbstractFloat} =
+    as(T,6.88)*(Dᵩ.q*(r[1]^2 + r[2]^2))^as(T,5/6)
 
 # Outer constructors.
 KolmogorovStructFunc{T}(r0::Real) where {T<:AbstractFloat} = KolmogorovStructFunc{T}(as(T, r0))
 KolmogorovStructFunc(r0::T) where {T<:AbstractFloat} = KolmogorovStructFunc{T}(r0)
 
 # Conversions.
-KolmogorovStructFunc(f::KolmogorovStructFunc) = f
-KolmogorovStructFunc{T}(f::KolmogorovStructFunc{T}) where {T} = f
-KolmogorovStructFunc{T}(f::KolmogorovStructFunc) where {T} = KolmogorovStructFunc{T}(f.r0)
+KolmogorovStructFunc(Dᵩ::KolmogorovStructFunc) = Dᵩ
+KolmogorovStructFunc{T}(Dᵩ::KolmogorovStructFunc{T}) where {T} = Dᵩ
+KolmogorovStructFunc{T}(Dᵩ::KolmogorovStructFunc) where {T} = KolmogorovStructFunc{T}(Dᵩ.r0)
 for type in (:StructureFunction, :KolmogorovStructFunc)
     @eval begin
-        Base.convert(::Type{$type{T}}, f::KolmogorovStructFunc{T}) where {T} = f
-        Base.convert(::Type{$type{T}}, f::KolmogorovStructFunc) where {T} =
-            KolmogorovStructFunc{T}(f)
+        Base.convert(::Type{$type{T}}, Dᵩ::KolmogorovStructFunc{T}) where {T} = Dᵩ
+        Base.convert(::Type{$type{T}}, Dᵩ::KolmogorovStructFunc) where {T} =
+            KolmogorovStructFunc{T}(Dᵩ)
     end
 end
 
@@ -136,20 +136,20 @@ function countnz(S::AbstractArray)
 end
 
 """
-    var(f, S, σ=0) -> V
+    var(Dᵩ, S, σ=0) -> Vᵩ
 
-yields the non-uniform variance `V` of a random field having a structure
-function `f` on a support `S` and a piston mode with standard deviation `σ`.
+yields the non-uniform variance `Vᵩ` of a random field having a structure
+function `Dᵩ` on a support `S` and a piston mode with standard deviation `σ`.
 The covariance between two nodes of Cartesian coordinates `r` and `r′` is then
 given by:
 
-    Cov(r,r′) = (V[r] + V[r′] - f(r - r′))/2
+    Cov(r,r′) = (Vᵩ[r] + Vᵩ[r′] - Dᵩ(r - r′))/2
 
 if `S[r]` and `S[r′]` are both non-zero, the covariance being zero if any of
 `r` or `r′` is outside the support.
 
 """
-function var(f::StructureFunction{T},
+function var(Dᵩ::StructureFunction{T},
              S::AbstractArray{X},
              σ::Real = zero(T)) where {T<:AbstractFloat,X<:Real}
     # Check piston variance.
@@ -159,82 +159,83 @@ function var(f::StructureFunction{T},
     # Check support and compute normalization factor.
     q = as(T, check_support(S))
 
-    # Pre-compute K(r) = ∫f(r - r′)⋅S(r′)⋅dr′
+    # Pre-compute Kᵩ(r) = ∫Dᵩ(r - r′)⋅S(r′)⋅dr′
     R = CartesianIndices(S)
-    K = similar(S, T)
+    Kᵩ = similar(S, T)
     @inbounds for r ∈ R
         S_r = S[r]
         if iszero(S_r)
-            K[r] = zero(T)
+            Kᵩ[r] = zero(T)
         else
             s = zero(T)
             if X <: Bool
                 for r′ ∈ R
                     S_r′ = S[r′]
                     iszero(S_r′) && continue
-                    s += oftype(s, f(r - r′))
+                    s += oftype(s, Dᵩ(r - r′))
                 end
             else
                 for r′ ∈ R
                     S_r′ = S[r′]
                     iszero(S_r′) && continue
-                    s += oftype(s, f(r - r′))*oftype(s, S_r′)
+                    s += oftype(s, Dᵩ(r - r′))*oftype(s, S_r′)
                 end
             end
-            K[r] = s/q
+            Kᵩ[r] = s/q
         end
     end
 
-    # Compute c0 = σ^2 - (1/2)⋅∫K(r)⋅S(r)⋅dr
+    # Compute c0 = σ^2 - (1/2)⋅∫Kᵩ(r)⋅S(r)⋅dr
     s = zero(T)
     if eltype(S) === Bool
-        @inbounds @simd for i in eachindex(K, S)
-            s += K[i]
+        @inbounds @simd for i in eachindex(Kᵩ, S)
+            s += Kᵩ[i]
         end
     else
-        @inbounds @simd for i in eachindex(K, S)
-            s += K[i]*oftype(s, S[i])
+        @inbounds @simd for i in eachindex(Kᵩ, S)
+            s += Kᵩ[i]*oftype(s, S[i])
         end
     end
     c0 = σ² - s/2q
 
-    # Overwrite K with the variance.
-    @inbounds @simd for i in eachindex(K)
-        K[i] = ifelse(iszero(K[i]), zero(T), K[i] + c0)
+    # Overwrite Kᵩ with the variance.
+    @inbounds @simd for i in eachindex(Kᵩ)
+        Kᵩ[i] = ifelse(iszero(Kᵩ[i]), zero(T), Kᵩ[i] + c0)
     end
 
-    return K
+    return Kᵩ
 end
 
 """
-    cov(f::StructureFunction, S, σ=0; pack=false) -> C
+    cov(Dᵩ::StructureFunction, S, σ=0; pack=false) -> Cᵩ
 
-yields the covariance of a random field whose structure function is `f` over an
-support defined by `S` and whose piston mode has a standard deviation of `σ`.
+yields the covariance of a random field whose structure function is `Dᵩ` over
+an support defined by `S` and whose piston mode has a standard deviation of
+`σ`.
 
 The range of indices to consider for the random field is the same as that of
 `S` unless keyword `pack` is true, in which case only the indices inside the
 support `S` are considered.
 
 The result is a flattened `n×n` covariance matrix with `n = length(S)` if
-`pack` is false, or `n` the number of non-zeros in the support `S` if
-`pack` is true.
+`pack` is false, or `n` the number of non-zeros in the support `S` if `pack` is
+true.
 
 The implemented method is described in the notes accompanying this package.
 
 """
-function cov(f::StructureFunction{T},
+function cov(Dᵩ::StructureFunction{T},
              S::AbstractArray{<:Real},
              σ::Real = zero(T);
              pack::Bool = false) where {T<:AbstractFloat}
     # Compute non-uniform variance.
-    V = var(f, S, σ)
+    Vᵩ = var(Dᵩ, S, σ)
 
     # Compute covariance.
     R = CartesianIndices(S)
     if pack
         nnz = countnz(S)
-        C = Array{T}(undef, (nnz, nnz))
+        Cᵩ = Array{T}(undef, (nnz, nnz))
         i = 0
         @inbounds for r ∈ R
             iszero(S[r]) && continue
@@ -245,53 +246,53 @@ function cov(f::StructureFunction{T},
                 i′ += 1
                 if i ≤ i′
                     # Instantiate covariance.
-                    C[i′,i] = ((V[r] + V[r′]) - f(r - r′))/2
+                    Cᵩ[i′,i] = ((Vᵩ[r] + Vᵩ[r′]) - Dᵩ(r - r′))/2
                 else
-                    # Avoid computations as C is symmetric.
-                    C[i′,i] = C[i,i′]
+                    # Avoid computations as Cᵩ is symmetric.
+                    Cᵩ[i′,i] = Cᵩ[i,i′]
                 end
             end
         end
     else
         n = length(S)
-        C = zeros(T, (n, n))
+        Cᵩ = zeros(T, (n, n))
         @inbounds for (i,r) ∈ enumerate(R)
             iszero(S[r]) && continue
             for (i′,r′) ∈ enumerate(R)
                 iszero(S[r′]) && continue
                 if i ≤ i′
                     # Instantiate covariance.
-                    C[i′,i] = ((V[r] + V[r′]) - f(r - r′))/2
+                    Cᵩ[i′,i] = ((Vᵩ[r] + Vᵩ[r′]) - Dᵩ(r - r′))/2
                 else
-                    # Avoid computations as C is symmetric.
-                    C[i′,i] = C[i,i′]
+                    # Avoid computations as Cᵩ is symmetric.
+                    Cᵩ[i′,i] = Cᵩ[i,i′]
                 end
             end
         end
     end
-    return C
+    return Cᵩ
 end
 
 """
-    StructureFunctions.LazyCovariance(f, S, σ) -> Cov
+    StructureFunctions.LazyCovariance(Dᵩ, S, σ) -> Cᵩ
 
 yields an object that can be used as:
 
-    Cov[i, j]
+    Cᵩ[i, j]
 
 to compute *on the fly* the covariance of a random field whose structure
-function is `f` over a support defined by `S` and whose piston mode has a
+function is `Dᵩ` over a support defined by `S` and whose piston mode has a
 standard deviation of `σ`. Indices `i` and `j` can be linear indices or
 Cartesian indices that must be valid to index `S`.
 
-The fields of a lazy covariance object `Cov` may be retrieved by the `Cov.key`
+The fields of a lazy covariance object `Cᵩ` may be retrieved by the `Cᵩ.key`
 syntax or via getters:
 
-    Cov.func    # yields the structure function
-    Cov.support # yields the normalized support
-    Cov.diag    # yields the diagonal entries, also non-uniform variances
-    diag(Cov)   # idem.
-    var(Cov)    # idem.
+    Cᵩ.func    # yields the structure function
+    Cᵩ.support # yields the normalized support
+    Cᵩ.diag    # yields the diagonal entries, also non-uniform variances
+    diag(Cᵩ)   # idem.
+    var(Cᵩ)    # idem.
 
 """
 struct LazyCovariance{T<:AbstractFloat,N,
@@ -304,7 +305,7 @@ struct LazyCovariance{T<:AbstractFloat,N,
 
     # The inner constructor is to ensure that arrays standard linear indexing
     # and the the same axes.
-    function LazyCovariance(sf::F, sup::S, diag::D) where {T<:AbstractFloat,N,
+    function LazyCovariance(Dᵩ::F, sup::S, diag::D) where {T<:AbstractFloat,N,
                                                            F<:StructureFunction{T},
                                                            S<:AbstractArray{T,N},
                                                            D<:AbstractArray{T,N}}
@@ -314,7 +315,7 @@ struct LazyCovariance{T<:AbstractFloat,N,
             "array of diagonal entries must have standard linear indexing"))
         axes(sup) == axes(diag) || throw(DimensionMismatch(
             "support and variance arrays have incompatible dimensions/indices"))
-        return new{T,N,F,S,D}(sf, sup, diag)
+        return new{T,N,F,S,D}(Dᵩ, sup, diag)
     end
 end
 
@@ -324,12 +325,12 @@ diag(A::LazyCovariance) = A.diag
 var(A::LazyCovariance) = diag(A)
 
 # Constructor.
-function LazyCovariance(f::StructureFunction{T},
+function LazyCovariance(Dᵩ::StructureFunction{T},
                         S::AbstractArray{<:Real,N},
                         σ::Real = zero(T)) where {T<:AbstractFloat,N}
     sup = normalize_support(T, S)
-    diag = var(f, S, σ)
-    return LazyCovariance(f, sup, diag)
+    diag = var(Dᵩ, S, σ)
+    return LazyCovariance(Dᵩ, sup, diag)
 end
 
 # Implement abstract array API.
@@ -380,27 +381,27 @@ end
 end
 
 """
-    StructureFunctions.PackedLazyCovariance(f, S, σ) -> Cov
+    StructureFunctions.PackedLazyCovariance(Dᵩ, S, σ) -> Cᵩ
 
 yields an object that can be used as:
 
-    Cov[i,j]
+    Cᵩ[i,j]
 
 to compute *on the fly* the covariance of a random field whose structure
-function is `f` over a support defined by `S` and whose piston mode has a
+function is `Dᵩ` over a support defined by `S` and whose piston mode has a
 standard deviation of `σ`. Indices `i` and `j` are linear indices in the range
 `1:nnz` with `nnz` the number of non-zeros in the support `S`.
 
-The fields of a packed lazy covariance object `Cov` may be retrieved by the
-`Cov.key` syntax or via getters:
+The fields of a packed lazy covariance object `Cᵩ` may be retrieved by the
+`Cᵩ.key` syntax or via getters:
 
-    Cov.func    # yields the structure function
-    Cov.support # yields the normalized support
-    Cov.mask    # yields the boolean support
-    Cov.indices # yields the Cartesian indices of the diagonal entries
-    Cov.diag    # yields the diagonal entries, also non-uniform variances
-    diag(Cov)   # idem.
-    var(Cov)    # idem.
+    Cᵩ.func    # yields the structure function
+    Cᵩ.support # yields the normalized support
+    Cᵩ.mask    # yields the boolean support
+    Cᵩ.indices # yields the Cartesian indices of the diagonal entries
+    Cᵩ.diag    # yields the diagonal entries, also non-uniform variances
+    diag(Cᵩ)   # idem.
+    var(Cᵩ)    # idem.
 
  """
 struct PackedLazyCovariance{T<:AbstractFloat,N,
@@ -414,15 +415,15 @@ struct PackedLazyCovariance{T<:AbstractFloat,N,
     mask::M     # boolean support
     indices::I  # linear index in variance -> Cartesian index in support
     diag::D     # diagonal entries, also non-uniform variances
-    function PackedLazyCovariance(sf::F, sup::S, mask::M, inds::I,
+    function PackedLazyCovariance(Dᵩ::F, sup::S, mask::M, inds::I,
                                   diag::D) where {T<:AbstractFloat,N,
                                                   F<:StructureFunction{T},
                                                   I<:AbstractVector{<:CartesianIndex{N}},
                                                   S<:AbstractArray{T,N},
                                                   M<:AbstractArray{Bool,N},
                                                   D<:AbstractVector{T}}
-        check_struct(PackedLazyCovariance, sf, sup, mask, inds, diag)
-        return new{T,N,F,S,M,I,D}(sf, sup, mask, inds, diag)
+        check_struct(PackedLazyCovariance, Dᵩ, sup, mask, inds, diag)
+        return new{T,N,F,S,M,I,D}(Dᵩ, sup, mask, inds, diag)
     end
 end
 
@@ -430,7 +431,7 @@ check_struct(A::PackedLazyCovariance) = check_struct(
     PackedLazyCovariance, A.func, A.support, A.mask, A.indices, A.diag)
 
 function check_struct(::Type{<:PackedLazyCovariance},
-                      sf::F, sup::S, mask::M, inds::I,
+                      Dᵩ::F, sup::S, mask::M, inds::I,
                       diag::D) where {T<:AbstractFloat,N,
                                       F<:StructureFunction{T},
                                       I<:AbstractVector{<:CartesianIndex{N}},
@@ -470,14 +471,14 @@ StructureFunction(A::PackedLazyCovariance) = A.func
 diag(A::PackedLazyCovariance) = A.diag
 var(A::PackedLazyCovariance) = diag(A)
 
-function PackedLazyCovariance(f::StructureFunction{T},
+function PackedLazyCovariance(Dᵩ::StructureFunction{T},
                               S::AbstractArray{<:Real,N},
                               σ::Real = zero(T)) where {T<:AbstractFloat,N}
-    return PackedLazyCovariance(LazyCovariance(f, S, σ))
+    return PackedLazyCovariance(LazyCovariance(Dᵩ, S, σ))
 end
 
 function PackedLazyCovariance(A::LazyCovariance{T,N})  where {T<:AbstractFloat,N}
-    f, S = A.func, A.support
+    Dᵩ, S = A.func, A.support
     nnz = countnz(S)
     inds = Vector{CartesianIndex{N}}(undef, nnz)
     mask = similar(S, Bool)
@@ -493,7 +494,7 @@ function PackedLazyCovariance(A::LazyCovariance{T,N})  where {T<:AbstractFloat,N
             diag[i] = A.diag[r]
         end
     end
-    return PackedLazyCovariance(f, S, mask, inds, diag)
+    return PackedLazyCovariance(Dᵩ, S, mask, inds, diag)
 end
 
 # Implement abstract array API.
