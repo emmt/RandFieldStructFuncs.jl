@@ -4,10 +4,11 @@ export
     EmpiricalStructureFunction,
     KolmogorovStructFunc,
     StructureFunction,
-    cov, var, diag
+    cov, var, diag, nobs, weights
 
 using TypeUtils, OffsetArrays
 
+using StatsBase, Statistics, LinearAlgebra
 import Statistics: cov, var
 import LinearAlgebra: diag
 
@@ -551,8 +552,12 @@ An empirical structure function object `A` has the following properties:
     A.weights # cumulated weigts
     A.nobs    # number of observations
 
-Base methods `values(A)` and `valtype(A)` yield the integrated values and their
-type for the sampled structure function `A`.
+Some methods are extended to retrieve these properties:
+
+    nobs(A)    # number of observations
+    values(A)  # weighted average of values
+    weights(A) # weighs of values (a.k.a. precision)
+    valtype(A) # element type of values
 
 """
 mutable struct EmpiricalStructureFunction{T<:AbstractFloat,N,
@@ -564,9 +569,12 @@ mutable struct EmpiricalStructureFunction{T<:AbstractFloat,N,
     nobs::Int  # number of observations
 end
 
+StatsBase.nobs(A::EmpiricalStructureFunction) = getfield(A, :nobs)
+StatsBase.weights(A::EmpiricalStructureFunction) = getfield(A, :weights)
+
 Base.valtype(A::EmpiricalStructureFunction) = valtype(typeof(A))
 Base.valtype(::Type{<:EmpiricalStructureFunction{T}}) where {T} = T
-Base.values(A::EmpiricalStructureFunction) = A.values
+Base.values(A::EmpiricalStructureFunction) = getfield(A, :values)
 
 # Make properties read-only.
 @inline Base.getproperty(A::EmpiricalStructureFunction, f::Symbol) = getfield(A, f)
@@ -618,7 +626,7 @@ function Base.push!(A::EmpiricalStructureFunction{T,N},
     else
         throw(DimensionMismatch("incompatible dimensions/indices"))
     end
-    setfield!(A, :nobs, A.nobs + 1)
+    A.nobs += 1
     return A
 end
 
