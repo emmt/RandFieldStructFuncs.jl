@@ -6,11 +6,14 @@ export
     KolmogorovStructFunc,
     cov, var, diag, nobs, weights
 
-using TypeUtils, OffsetArrays
-
+using TypeUtils, ArrayTools, OffsetArrays
+using AbstractFFTs
+using AbstractFFTs: Plan
 using StatsBase, Statistics, LinearAlgebra
 import Statistics: cov, var
 import LinearAlgebra: diag
+
+include("dft.jl")
 
 """
     AbstractStructFunc{T}
@@ -109,13 +112,13 @@ function check_support(S::AbstractArray{X}) where {X<:Real}
     if X <: Bool
         s = countnz(S)
     else
-        T = promote_type(Float64, X)
+        T = promote_type(Float64, X) # use at least double-precision
         s = zero(T)
         flag = true
         @inbounds @simd for i in eachindex(S)
-            S_i = S[i]
-            flag &= (S_i ≥ zero(S_i))
-            s += oftype(s, S_i)
+            Sᵢ = S[i]
+            flag &= (Sᵢ ≥ zero(Sᵢ))
+            s += oftype(s, Sᵢ)
         end
         flag || throw(ArgumentError("support function must be nonnegative everywhere"))
     end
@@ -527,55 +530,70 @@ Base.IndexStyle(::PackedLazyCovariance) = IndexCartesian()
 end
 
 """
-    A = EmpiricalStructFunc{T}(S)
+    A = EmpiricalStructFunc{T}(S[, plan])
 
 yields an (empty) empirical structure function with values of floating-point
-type `T` and for a support `S`. An empirical structure function `A` behaves
-like an array. For example:
+type `T` and for a support `S`. Parameter `T` may be omitted to determine the
+floating-point type from the arguments.
 
-    A[Δr]
+If optional argument `plan` is not specified, the empirical structure function
+is updated by means of fast Fourier transforms (FFTs) and keywords `flags` and
+`timelimit` may be specified to build the FFT plan (defaults are
+`flags=FFTW.ESTIMATE` and `timelimit=Inf`). Otherwise, `plan` maybe a
+precomputed suitable FFT plan or `nothing` to use a **slow** update method.
+
+The base method `push!` can be used to *update* the data into the empirical
+structure function object:
+
+    push!(A, φ)
+
+where `φ` is a random sample which can be an array of the same size as `S`. If
+`plan` is `nothing`, `φ` may also be a vector whose length is the number of
+non-zeros in the support `S`.
+
+An empirical structure function object `A` has the following properties:
+
+    A.support # support
+    A.num     # cumulated numerator
+    A.den     # denominator
+    A.nobs    # number of observations
+
+The following methods are applicable:
+
+    nobs(A)         # number of observations
+    Dᵩ = values(A)  # compute the empirical structure function
+    valtype(A)      # element type of `Dᵩ`
+
+The empirical structure function `Dᵩ` computed by `values(A)` is an
+`OffsetArray` instance such that:
+
+    Dᵩ[Δr]
 
 yields the value of the empirical structure function for a displacement `Δr`
 which may be specified as a Cartesian index.
 
-The base method `push!` can be used to *integrate* data into the empirical
-structure function object:
-
-    push!(A, x)
-
-where `x` is a random sample which can be an array of the same size as `S` or a
-vector whose length is the number of non-zeros in the support `S`.
-
-An empirical structure function object `A` has the following properties:
-
-    A.support # normalized support
-    A.values  # weighted average of values
-    A.weights # cumulated weigts
-    A.nobs    # number of observations
-
-Some methods are extended to retrieve these properties:
-
-    nobs(A)    # number of observations
-    values(A)  # weighted average of values
-    weights(A) # weighs of values (a.k.a. precision)
-    valtype(A) # element type of values
-
 """
-mutable struct EmpiricalStructFunc{T<:AbstractFloat,N,
-                                   S<:AbstractArray{T,N},
-                                   A<:OffsetArray{T,N}} <: AbstractArray{T,N}
-    support::S # normalized support
-    values::A  # weighted average of values
-    weights::A # cumulated weights
+mutable struct EmpiricalStructFunc{T<:AbstractFloat,N,P,
+                                   S<:AbstractArray{<:Union{Bool,T},N},
+                                   A<:AbstractArray{T,N},
+                                   B<:AbstractArray{T,N},
+                                   W₀}
+    plan::P
+    support::S # support
+    den::A
+    num::B
+    w₀::W₀
     nobs::Int  # number of observations
 end
 
 StatsBase.nobs(A::EmpiricalStructFunc) = getfield(A, :nobs)
-StatsBase.weights(A::EmpiricalStructFunc) = getfield(A, :weights)
 
+# Extend some base methods.
+Base.length(A::EmpiricalStructFunc) = length(A.den)
+Base.size(A::EmpiricalStructFunc) = size(A.den)
+Base.axes(A::EmpiricalStructFunc) = axes(A.den)
 Base.valtype(A::EmpiricalStructFunc) = valtype(typeof(A))
 Base.valtype(::Type{<:EmpiricalStructFunc{T}}) where {T} = T
-Base.values(A::EmpiricalStructFunc) = getfield(A, :values)
 
 # Make properties read-only.
 @inline Base.getproperty(A::EmpiricalStructFunc, f::Symbol) = getfield(A, f)
@@ -583,102 +601,238 @@ Base.setproperty!(A::EmpiricalStructFunc, f::Symbol) = error(
     "attempt to ", (f ∈ propertynames(A) ? "modify read-only" : "access non-existing"),
     " property `$f`")
 
-EmpiricalStructFunc(S::AbstractArray{T,N}) where {T,N} =
-    EmpiricalStructFunc{float(T)}(S)
+#------------------------------------------------------------------------------
+# Fast empirical structure function.
 
-function EmpiricalStructFunc{T}(S::AbstractArray{<:Any,N}) where {T<:AbstractFloat,N}
-    S = normalize_support(T, S)
-    inds = map(r -> (first(r) - last(r)):(last(r) - first(r)), axes(S))
-    dims = map(d -> 2d - 1, size(S))
-    vals = OffsetArray(zeros(T, dims), inds)
-    wgts = OffsetArray(zeros(T, dims), inds)
-    return EmpiricalStructFunc{T,N,typeof(S),typeof(vals)}(S, vals, wgts, 0)
+EmpiricalStructFunc(S::AbstractArray{T,N}; kwds...) where {T,N} =
+    EmpiricalStructFunc{float(T)}(S; kwds...)
+
+EmpiricalStructFunc(S::AbstractArray{<:Any,N}, plan::Plan{Complex{T}}; kwds...) where {T,N} =
+    EmpiricalStructFunc{T}(S, plan; kwds...)
+
+function EmpiricalStructFunc{T}(S::AbstractArray{<:Real,N};
+                                threshold::Union{Nothing,Real}= nothing,
+                                kwds...) where {T<:AbstractFloat,N}
+    dims = goodfftdims(map(d -> 2d - 1, size(S)))
+    plan = plan_fft(Array{Complex{T}}(undef, dims); kwds...)
+    return EmpiricalStructFunc{T}(S, plan; threshold)
 end
 
-# Implement abstract array API.
-Base.length(A::EmpiricalStructFunc) = length(A.values)
-Base.size(A::EmpiricalStructFunc) = size(A.values)
-Base.axes(A::EmpiricalStructFunc) = axes(A.values)
-Base.IndexStyle(::EmpiricalStructFunc{T,N,S,A}) where {T,N,S,A} = IndexStyle(A)
+function EmpiricalStructFunc{T}(S::AbstractArray{<:Real,N},
+                                plan::Plan{Complex{T}};
+                                threshold::Union{Nothing,Real} = nothing) where {T<:AbstractFloat,N}
+    # Check/fix support.
+    check_support(S)
+    if !(eltype(S) <: Union{Bool,T})
+        S = convert(AbstractArray{T,N}, S)
+    end
 
-@inline function Base.getindex(A::EmpiricalStructFunc, I::Vararg{Int})
-    vals = A.values
-    @boundscheck checkbounds(Bool, vals, I...) || throw(BoundsError(A, I...))
-    @inbounds vals[I...]
+    # Compute denominator (in frequency domain).
+    dims = size(plan)
+    inds = fftshiftaxes(dims)
+    w = Array{Complex{T}}(undef, dims) # workspace
+    w₀ = plan*unsafe_zeropad_map(pow_0, w, S) # fft(zeropad(S, dims))
+
+    # Compute the denominator and threshold it.
+    a = OffsetArray(fftshift(real.(inv(plan)*abs2.(w₀))), inds)
+    τ = determine_threshold(T, S, threshold)
+    @inbounds @simd for i in eachindex(a)
+        aᵢ = a[i]
+        a[i] = ifelse(aᵢ > τ, aᵢ, zero(aᵢ))
+    end
+
+    # Allocate numerator (in frequency domain).
+    b = zeros(T, size(plan))
+    return EmpiricalStructFunc{
+        T,N,typeof(plan),typeof(S),typeof(a),typeof(b),typeof(w₀)}(
+        plan, S, a, b, w₀, 0)
 end
 
-@inline function Base.setindex!(A::EmpiricalStructFunc, x, I::Vararg{Int})
-    vals = A.values
-    @boundscheck checkbounds(Bool, vals, I...) || throw(BoundsError(A, I...))
-    @inbounds vals[I...] = x
+function Base.push!(A::EmpiricalStructFunc{T,N,<:Plan},
+                    φ::AbstractArray{<:Real,N}) where {T,N}
+    S = A.support
+    @assert_same_axes S φ
+
+    # Compute FFT terms needed for the numerator.
+    plan = A.plan # plan to compute FFT
+    w = Array{Complex{T}}(undef, size(plan)) # workspace for zero-padding
+    w₀ = A.w₀                                    # fft(zeropad(S,       dims))
+    w₁ = plan*unsafe_zeropad_map(pow_1, w, S, φ) # fft(zeropad(S.*φ,    dims))
+    w₂ = plan*unsafe_zeropad_map(pow_2, w, S, φ) # fft(zeropad(S.*φ.^2, dims))
+
+    # Update the numerator (in the frequency domain).
+    b = A.num
+    @inbounds @simd for k in eachindex(b, w₀, w₁, w₂)
+        b[k] += real(conj(w₀[k])*w₂[k]) - abs2(w₁[k])
+    end
+
+    # Update the number of observations and return.
+    setfield!(A, :nobs, nobs(A) + 1)
     return A
 end
 
-function Base.push!(A::EmpiricalStructFunc{T,N},
-                    x::Union{AbstractArray{<:Real,N},
+function Base.values(A::EmpiricalStructFunc{T,N,<:Plan}) where {T,N}
+    # Compute the current value of the numerator by inverse FFT and overwrite
+    # the resulting array with the structure function.
+    a = A.den
+    b = OffsetArray(fftshift(real.(inv(A.plan)*A.num)), axes(a))
+    @assert eltype(b) === T
+    if A.nobs ≥ 1
+        β = as(T, 2//A.nobs) # scaling factor
+        @inbounds @simd for i in eachindex(a, b)
+            aᵢ = as(T, a[i])
+            bᵢ = as(T, b[i])
+            b[i] = ifelse(aᵢ > zero(aᵢ), β*bᵢ/aᵢ, zero(T))
+        end
+    end
+    return b
+end
+
+determine_threshold(::Type{T}, S::AbstractArray, τ::Real) where {T} =
+    τ ≥ zero(τ) ? as(T, τ) : throw(ArgumentError(
+        "threshold must be non-negative"))
+
+function determine_threshold(::Type{T}, S::AbstractArray, τ::Nothing) where {T}
+    # Find the least positive value in S.
+    Sₘᵢₙ = typemax(eltype(S))
+    flag = false
+    @inbounds @simd for i in eachindex(S)
+        Sᵢ = S[i]
+        flag |= (Sᵢ > zero(Sᵢ))
+        Sₘᵢₙ = ifelse(zero(Sᵢ) < Sᵢ < Sₘᵢₙ, Sᵢ, Sₘᵢₙ)
+    end
+    return flag ? as(T, Sₘᵢₙ)^2/2 : sqrt(eps(T))
+end
+
+pow_0(::Type{T}, S::Bool) where {T} = ifelse(S, one(T), zero(T))
+pow_1(::Type{T}, S::Bool, φ::Real) where {T} = ifelse(S, as(T, φ), zero(T))
+pow_2(::Type{T}, S::Bool, φ::Real) where {T} = ifelse(S, as(T, φ*φ), zero(T))
+
+pow_0(::Type{T}, S::Real) where {T} = as(T, S)
+pow_1(::Type{T}, S::Real, φ::Real) where {T} = as(T, S*φ)
+pow_2(::Type{T}, S::Real, φ::Real) where {T} = as(T, S*(φ*φ))
+
+function unsafe_zeropad_map(f::Function,
+                            w::AbstractArray{T,N},
+                            S::AbstractArray{<:Any,N}) where {T,N}
+    fill!(w, zero(T))
+    @inbounds @simd for i ∈ @range CartesianIndices(w) ∩ CartesianIndices(S)
+        w[i] = f(T, S[i])
+    end
+    return w
+end
+
+function unsafe_zeropad_map(f::Function,
+                            w::AbstractArray{T,N},
+                            S::AbstractArray{<:Any,N},
+                            φ::AbstractArray{<:Any,N}) where {T,N}
+    fill!(w, zero(T))
+    @inbounds @simd for i ∈ @range CartesianIndices(w) ∩ CartesianIndices(S)
+        w[i] = f(T, S[i], φ[i])
+    end
+    return w
+end
+
+#------------------------------------------------------------------------------
+# Slow empirical structure function.
+
+EmpiricalStructFunc(S::AbstractArray{T,N}, plan::Nothing) where {T,N} =
+    EmpiricalStructFunc{float(T)}(S, plan)
+
+function EmpiricalStructFunc{T}(S::AbstractArray{<:Real,N},
+                                plan::Nothing) where {T<:AbstractFloat,N}
+    # Check/fix support.
+    check_support(S)
+    if !(eltype(S) <: Union{Bool,T})
+        S = convert(AbstractArray{T,N}, S)
+    end
+
+    # Dimensions.
+    inds = map(r -> (first(r) - last(r)):(last(r) - first(r)), axes(S))
+    dims = map(d -> 2d - 1, size(S))
+
+    # Allocate numerator and denominator arrays.
+    a = OffsetArray(zeros(T, dims), inds)
+    b = OffsetArray(zeros(T, dims), inds)
+
+    # Initialize denominator.
+    R = CartesianIndices(S)
+    @inbounds for i in R
+        Sᵢ = S[i]
+        iszero(Sᵢ) && continue
+        for j in R
+            Sⱼ = S[j]
+            iszero(Sⱼ) && continue
+            a[i - j] += as(T, Sᵢ*Sⱼ)
+        end
+    end
+
+    # Build structure.
+    return EmpiricalStructFunc{
+        T,N,typeof(plan),typeof(S),typeof(a),typeof(b),Nothing}(
+        plan, S, a, b, nothing, 0)
+end
+
+function Base.push!(A::EmpiricalStructFunc{T,N,Nothing},
+                    φ::Union{AbstractArray{<:Real,N},
                              AbstractVector{<:Real}}) where {T,N}
+    mul(::Type{T}, w::Bool, x::Real) = ifelse(w, as(T, x), zero(T))
+    mul(::Type{T}, w::Real, x::Real) = as(T, w)*as(T, x)
+
+    b = A.num
     S = A.support
-    if x isa AbstractArray{<:Real,N} && axes(x) == axes(S)
-        # Assume x is for all the nodes, inside and outside the support.
-        unsafe_update!(Val(:full), A, x)
-    elseif x isa AbstractVector{<:Real} && axes(x) == (Base.OneTo(countnz(S)),)
-        # Assume x is only for the nodes inside the support.
-        unsafe_update!(Val(:sparse), A, x)
+    R = CartesianIndices(S)
+    if φ isa AbstractArray{<:Real,N} && axes(φ) == axes(S)
+        # Assume φ is for all the nodes, inside and outside the support.
+        @inbounds for I in R
+            Sᵢ = S[I]
+            iszero(Sᵢ) && continue
+            φᵢ = φ[I]
+            for J in R
+                Sⱼ = S[J]
+                iszero(Sⱼ) && continue
+                φⱼ = φ[J]
+                b[I - J] += mul(T, Sᵢ*Sⱼ, abs2(φᵢ - φⱼ))
+            end
+        end
+    elseif φ isa AbstractVector{<:Real} && length(φ) == countnz(S)
+        # Assume φ is only for the nodes inside the support.
+        i₀ = firstindex(φ) - 1
+        i = i₀ # linear index in φ
+        @inbounds for I in R
+            Sᵢ = S[I]
+            iszero(Sᵢ) && continue
+            φᵢ = φ[i += 1]
+            j = i₀ # linear index in φ
+            for J in R
+                Sⱼ = S[J]
+                iszero(Sⱼ) && continue
+                φⱼ = φ[j += 1]
+                b[I - J] += mul(T, Sᵢ*Sⱼ, abs2(φᵢ - φⱼ))
+            end
+        end
     else
         throw(DimensionMismatch("incompatible dimensions/indices"))
     end
-    A.nobs += 1
+    setfield!(A, :nobs, nobs(A) + 1)
     return A
 end
 
-function unsafe_update!(::Val{:full},
-                        A::EmpiricalStructFunc{T,N},
-                        x::AbstractArray{<:Real,N}) where {T,N}
-    S = A.support
-    R = CartesianIndices(S)
-    @inbounds for r in R
-        S_r = S[r]
-        iszero(S_r) && continue
-        x_r = as(T, x[r])
-        for r′ in R
-            S_r′ = S[r′]
-            iszero(S_r′) && continue
-            x_r′ = as(T, x[r′])
-            unsafe_update!(A, r - r′, S_r*S_r′, abs2(x_r - x_r′))
+function Base.values(A::EmpiricalStructFunc{T,N,Nothing}) where {T,N}
+    a = A.den
+    b = A.num
+    Dᵩ = similar(b)
+    if A.nobs < 1
+        fill!(Dᵩ, zero(eltype(Dᵩ)))
+    else
+        β = as(T, 1//A.nobs) # scaling factor
+        @inbounds @simd for i in eachindex(Dᵩ, a, b)
+            aᵢ = as(T, a[i])
+            bᵢ = as(T, b[i])
+            Dᵩ[i] = ifelse(aᵢ > zero(aᵢ), β*bᵢ/aᵢ, zero(T))
         end
     end
-    nothing
-end
-
-function unsafe_update!(::Val{:sparse},
-                        A::EmpiricalStructFunc{T,N},
-                        x::AbstractVector{<:Real}) where {T,N}
-    S = A.support
-    R = CartesianIndices(S)
-    i = 0
-    @inbounds for r in R
-        S_r = S[r]
-        iszero(S_r) && continue
-        x_r = as(T, x[i += 1])
-        i′ = 0
-        for r′ in R
-            S_r′ = S[r′]
-            iszero(S_r′) && continue
-            x_r′ = as(T, x[i′ += 1])
-            unsafe_update!(A, r - r′, S_r*S_r′, abs2(x_r - x_r′))
-        end
-    end
-    nothing
-end
-
-@inline function unsafe_update!(A::EmpiricalStructFunc{T,N},
-                                Δr::CartesianIndex{N},
-                                wgt::T,
-                                val::T) where {T, N}
-    wgts = A.weights
-    vals = A.values
-    vals[Δr] = (wgts[Δr]*vals[Δr] + wgt*val)/(wgts[Δr] + wgt)
-    wgts[Δr] += wgt
+    return Dᵩ
 end
 
 # Provide list of (public) properties.

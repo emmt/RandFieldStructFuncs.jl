@@ -31,7 +31,7 @@ plimg(w; fig=2, title="Wavefront");
 sleep(0.1);
 
 # Empirically estimate the structure function.
-n = 100;
+n = 1000;
 printstyled("Computing empirical structure function from $n observations.\nHold your breath...\n";
             bold=true, color=:yellow)
 esf = EmpiricalStructFunc(S);
@@ -39,14 +39,14 @@ for i in 1:n;
     w[Cᵩ.mask] = L*randn(eltype(L), size(L,2));
     push!(esf, w);
 end
-plimg(esf.values; fig=3, title="Empirical Structure Function ($n samples)");
-plimg(esf.weights; fig=4, title="Cumulated Weights ($n samples)");
+plimg(values(esf); fig=3, title="Empirical Structure Function ($n samples)");
+plimg(esf.den; fig=4, title="Numerator");
 sleep(0.1);
 
 # Compute ground truth structure function.
-gtsf = similar(esf)
+gtsf = similar(esf.den)
 for Δr in CartesianIndices(gtsf)
-    gtsf[Δr] = iszero(esf.weights[Δr]) ? zero(eltype(gtsf)) : Dᵩ(Δr)
+    gtsf[Δr] = iszero(esf.den[Δr]) ? zero(eltype(gtsf)) : Dᵩ(Δr)
 end
 plimg(gtsf; fig=5, title="Theoretical Structure Function");
 sleep(0.1);

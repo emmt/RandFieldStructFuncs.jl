@@ -8,20 +8,26 @@
 \usepackage{mathtools}
 \DeclareMathOperator{\Var}{Var}
 \DeclareMathOperator{\Cov}{Cov}
+\renewcommand*{\Re}{\mathrm{Re}}
+
 
 \begin{document}
 \title{Structure Function and Covariance}
 \author {Éric Thiébaut}
-\date{1st version: March 10, 2023; last revision: July 3, 2023}
+\date{1st version: March 10, 2023; last revision: July 4, 2023}
 \maketitle
 
-\abstract{This note describes how to express the covariance $\Cov_{\varphi}$ of
-  a Gaussian random field $\varphi \sim \mathcal{N}(0, \Cov_{\varphi})$ given
-  the structure function $D_{\varphi}$ of $\varphi$ and the standard deviation
-  $\sigma$ of the \emph{piston} over a finite support $\mathcal{V}$. The
-  covariance $\Cov_{\varphi}$ is invertible if $\sigma \not= 0$.}
+\abstract{This notes details a fast algorithm to compute the empirical
+  structure function of a random field. This note describes how to express the
+  covariance $\Cov_{\varphi}$ of a Gaussian random field
+  $\varphi \sim \mathcal{N}(0, \Cov_{\varphi})$ given the structure function
+  $D_{\varphi}$ of $\varphi$ and the standard deviation $\sigma$ of the
+  \emph{piston} over a finite support $\mathcal{V}$. The covariance
+  $\Cov_{\varphi}$ is invertible if $\sigma \not= 0$.}
 
 \section{Structure function of a random field}
+
+\subsection{Definition and properties of the structure function}
 
 The structure function of the random field $\phi(r)$ is defined by:
 \begin{equation}
@@ -63,6 +69,188 @@ Hence the spatial covariance of the field can be expressed as:
   \bigr].
 \end{equation}
 
+
+\subsection{Numerical computation of the empirical structure function}
+
+Assume that the field $\phi(r)$ is sampled on a finite size volume
+$\mathcal{V}$ and that a set of $T$ mutually independent sampled fields
+$\{\phi_{t}\}_{t \in 1:T}$ is available. The empirical structure function
+of the field can be computed as follows:
+\begin{align}
+  D_{\phi}[i]
+  &= \begin{cases}
+       0 & \text{if $a[i] = 0$,}\\
+       \displaystyle \frac{1}{T \times a[i]}
+       \sum_{t=1}^{T} b_{t}[i] & \text{else}\\
+     \end{cases}\\
+  \intertext{with:}
+  a[i] &= \alpha\,|\mathcal{R}_i|, \\
+  b_{t}[i] &= \alpha\,\sum_{j \in \mathcal{R}_i}
+             \bigl(\phi_{t}[j] - \phi_{t}[i+j]\bigr)^{2},
+\end{align}
+for any $\alpha \not= 0$ and where $\mathcal{R}_i$ is the set of indices $j$
+such that $(j,j+i)\in\mathcal{V}^{2}$ and $|\mathcal{R}_i|$ denotes the number
+of elements of $\mathcal{R}_i$. Introducing the discrete support $S$ such that:
+\begin{align}
+  S[i]
+  &= \begin{cases}
+       \eta & \text{if $i \in \mathcal{V}$,}\\
+       0 & \text{else,}\\
+     \end{cases}
+\end{align}
+with $\eta \not= 0$, the terms $a[i]$ and $b_{t}[i]$ can be computed by:
+\begin{align}
+  \label{eq:naive_a}
+  a[i] &= \sum\nolimits_{j} S[j]\,S[j+i],\\
+  \label{eq:naive_b}
+  b_{t}[i] &= \sum\nolimits_{j} S[j]\,S[j+i]\,
+             \bigl(\phi_{t}[j] - \phi_{t}[i+j]\bigr)^{2},
+\end{align}
+where each sum $\sum\nolimits_{j}$ is for all indices $j$ valid for the
+subsequent expression. This corresponds to having $\alpha = \eta^{2}$.
+Note that indices $i$ and $j$ may be multi-dimensional (as, for example,
+\texttt{CartesianIndex} in Julia).
+
+If the sampled fields $\phi_{t}$ have $N$ elements, computing the empirical
+structure function takes $\mathcal{O}(T\,N^{2})$ operations which is
+prohibitive except for very small $N$.
+
+To accelerate computations, we first note that it is clear from
+Eq.~\eqref{eq:naive_a} that the term $a$ is the discrete auto-correlation of
+the discrete support. Indeed $a = S \otimes S$ where the discrete correlation
+operator $\otimes$ is defined by:
+\begin{align}
+  \label{eq:discrete_correlation}
+  (x \otimes y)[i] = \sum\nolimits_{j} x[j]\,y[j+i]\,
+\end{align}
+which can be quickly computed by means of Fast discrete Fourier transforms
+(FFTs):
+\begin{align}
+  \label{eq:fast_discrete_correlation}
+  x \otimes y = \mathtt{fftshift}(\mathtt{ifft}(
+  \mathtt{fft}(\mathtt{zeropad}(x, \mathtt{dims}))^{*} \times
+  \mathtt{fft}(\mathtt{zeropad}(y, \mathtt{dims})))),
+\end{align}
+where $\mathtt{zeropad}(z, \mathtt{dims})$ yields array $z$ extended to
+dimensions $\mathtt{dims}$ which must be chosen large enough to avoid aliasing
+and to be suitable for the FFT\footnote{FFTs are more efficient when dimensions
+  are multiple of small prime numbers}, $\mathtt{fft}$ yields the FFT of its
+argument, superscript $*$ denotes element-wise complex conjugation, $\times$
+denotes element-wise multiplication (Hadamard product), $\mathtt{ifft}$ yields
+the inverse\footnote{for real-valued arrays $x$ and $y$ it is assumed that
+  $\mathtt{ifft}$ yields the real part of the inverse FFT} FFT of its argument,
+and $\mathtt{fftshift}$ performs a circular permutation of its argument so as
+to put the zeroth frequency assumed by the FFT in the geometrical center of the
+array. In Eq.~\eqref{eq:fast_discrete_correlation}, if $F$ is the linear
+operator implementing the FFT, then the inverse FFT is implemented by
+$(1/N')\,F^{*}$ with $F^{*}$ the adjoint (conjugate transpose) of $F$ and
+$N' = \mathtt{prod}(\mathtt{dims})$ the size of the FFT arguments. For other
+definitions of the FFT, the left hand-side of
+Eq.~\eqref{eq:fast_discrete_correlation} may have to be multiplied by a factor
+that only depends on $N'$.
+
+Hence the term $a$  can be computed as:
+\begin{align}
+  a
+  &= S \otimes S\\
+  \label{eq:fast_a}
+  &= \mathtt{fftshift}(\mathtt{ifft}(|\widehat{w}_{0}|^{2})), \\
+  \intertext{with:}
+  \widehat{w}_{0} &= \mathtt{fft}(\mathtt{zeropad}(S, \mathtt{dims})),
+\end{align}
+where $|z|^{2}$ denotes the element-wise squared modulus of array $z$. If
+$N' = \mathtt{prod}(\mathtt{dims})$ is the size of the zero-padded arrays, the
+FFT and its inverse takes $\mathcal{O}(N'\,\log N')$ operations. As all other
+functions take $\mathcal{O}(N')$ operations, computing the term $a$ by means of
+FFTs takes about $\mathcal{O}(2\,N'\,\log N')$ operations which is much faster
+than $\mathcal{O}(N^{2})$ by the \emph{naive} method.
+
+To accelerate the computation of the term $b_{t}$, we develop it to rewrite it as a sum of correlation products:
+\begin{align}
+  b_{t}[i]
+  &= \sum\nolimits_{j} S[j]\,S[j+i]\,
+    \bigl(\phi_{t}[j] - \phi_{t}[i+j]\bigr)^{2}\notag\\
+  &= \sum\nolimits_{j} S[j]\,\phi_{t}[j]^{2}\,S[j+i]
+    + \sum\nolimits_{j} S[j]\,S[j+i]\,\phi_{t}[j+i]^{2}
+    - 2\,\sum\nolimits_{j} S[j]\,\phi_{t}[j]\,S[j+i]\,\phi_{t}[j+i]\notag\\
+\intertext{which shows that:}
+  b_{t}
+  &= (S \times \phi_{t}^{2}) \otimes S
+    + S \otimes (S \times \phi_{t}^{2})
+    - 2\,(S \times \phi_{t}) \otimes (S \times \phi_{t})\\
+  \label{eq:fast_b}
+  &= \mathtt{fftshift}(\mathtt{ifft}(
+    2\,\Re(\widehat{w}_{0}^{*} \times \widehat{w}_{2,t})
+    - 2\,|\widehat{w}_{1,t}|^{2})
+  ), \\
+  \intertext{with:}
+  \widehat{w}_{1,t}
+  &= \mathtt{fft}(\mathtt{zeropad}(S \times \phi_{t}, \mathtt{dims})),\\
+  \widehat{w}_{2,t}
+  &= \mathtt{fft}(\mathtt{zeropad}(S \times \phi_{t}^{2}, \mathtt{dims})),
+\end{align}
+where (as before) the power $\phi_{t}^{2}$ and the multiplication $\times$ are
+applied element-wise.
+
+The FFT of the $b_{t}$ terms may be summed over $t$ to save $T - 1$ inverse
+FFT's. All these lead to the following fast algorithm to compute the empirical
+structure function of $T$ sampled random fields $\{\phi_{t}\}_{t\in1:t}$:
+\begin{equation}
+  \label{alg:fast-struct-func}
+  \begin{array}{l}
+    \widehat{w}_{0} = \mathtt{fft}(\mathtt{zeropad}(S, \mathtt{dims}))\\
+    \widehat{b} \gets 0\\
+    \text{for $t \in 1:T$}\\
+    \qquad \widehat{w}_{1} \gets
+    \mathtt{fft}(\mathtt{zeropad}(S \times \phi_{t}, \mathtt{dims}))\\
+    \qquad \widehat{w}_{2} \gets
+    \mathtt{fft}(\mathtt{zeropad}(S \times \phi_{t}^{2}, \mathtt{dims}))\\
+    \qquad \widehat{b} \gets \widehat{b} +\bigl(
+    \Re(\widehat{w}_{0}^{*} \times \widehat{w}_{2})
+    - |\widehat{w}_{1}|^{2}\bigr) \\
+    a \gets \mathtt{fftshift}(\mathtt{ifft}(|\widehat{w}_{0}|^{2}))\\
+    b \gets (2/T)\,\mathtt{fftshift}(\mathtt{ifft}(\widehat{b}))\\
+    \text{for $i \in 1:N'$}\\
+    \qquad D_{\phi}[i] = \begin{cases}
+       b[i]/a[i] & \text{if $a[i] > \tau$,}\\
+       0 & \text{else}\\
+     \end{cases}\\
+  \end{array}
+\end{equation}
+where $\tau > 0$ is a threshold to account for rounding errors when $a$ is
+computed by means of FFTs. When $S$ takes its values on $\{0,1\}$,
+$a[i] = |\mathcal{R}_{i}|$, the entries of $a$ should be integers, so we take
+$\tau = 1/2$ to disentangle between $a[i] \simeq 0$ and $a[i] \gtrsim 1$ as
+would be done by rounding $a$ to the nearest integer. Noting that multiplying
+$S$ by any non-zero factor cancels has no incidence on the computed empirical
+structure function, the fast algorithm may also be applied to any discrete
+support $S$ with nonnegative entries (this includes the scaled support) but the
+value of $\tau$ must be then be chosen appropriately. The number of operations
+in the fast algorithm in Eq.~\eqref{alg:fast-struct-func} is dominated by the
+$2\,T + 3$ FFTs.
+
+In the $\mathtt{StructureFunctions}$ Julia package, an instance $A$ of
+$\mathtt{EmpiricalStructureFunction}$
+may be used as follows:
+\begin{align*}
+  &A = \mathtt{EmpiricalStructFunc}(S)
+  &&\text{\# create structure function object with support $S$}\\
+  &\mathtt{for}\ \phi_{t}\ \mathtt{in}\ \Phi
+  && \text{\# integrate structure function}\\
+  &\qquad\mathtt{push!}(A, \phi_{t})\\
+  &\mathtt{end}\\
+  &T = \mathtt{nobs}(A)
+  && \text{\# get the number of observations}\\
+  &D_{\phi} = \mathtt{values}(A)
+  && \text{\# compute the structure function}
+\intertext{At any moment:}
+  &a = A\mathtt{.den}
+  &&\text{\# yields the denominator $a = S \otimes S$}\\
+  &\widehat{b} =  A\mathtt{.num}
+  && \text{\# yields the numerator in the frequency domain}
+\end{align*}
+Note that the denominator is computed at creation of the structure and that its
+values are already soft-thresholded.
 
 \section{De-Pistoned field}
 

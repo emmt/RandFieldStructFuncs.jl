@@ -1,11 +1,19 @@
 module TestingStructureFunctions
 
-using Test, Statistics, LinearAlgebra
+using Test, Statistics, LinearAlgebra, EasyRanges
 using StructureFunctions
 using StructureFunctions: LazyCovariance, PackedLazyCovariance
 
+function max_abs_dif(A::AbstractArray, B::AbstractArray)
+    v = zero(promote_type(eltype(A), eltype(B)))
+    for i in @range CartesianIndices(A) ∩ CartesianIndices(B)
+        v = max(v, abs(A[i] - B[i]))
+    end
+    return v
+end
+
 @testset "StructureFunctions.jl" begin
-    f = KolmogorovStructFunc(1.2)
+    f = @inferred KolmogorovStructFunc(1.2)
     let f32 = KolmogorovStructFunc{Float32}(f)
         z1 = CartesianIndex(0,0)
         z2 = (zero(BigFloat), zero(Int))
@@ -26,10 +34,10 @@ using StructureFunctions: LazyCovariance, PackedLazyCovariance
     @test size(C) == (n, n)
     @test C == C' # is matrix symmetric?
     σ = 0.1
-    C = cov(f, S, σ)
+    C = @inferred cov(f, S, σ)
     @test size(C) == (n, n)
     @test C == C' # is matrix symmetric?
-    LC = LazyCovariance(f, S, σ)
+    LC = @inferred LazyCovariance(f, S, σ)
     @test size(LC) == (n,n)
     @test axes(LC) === map(Base.OneTo, size(LC))
     @test LC ≈ C
@@ -44,33 +52,44 @@ using StructureFunctions: LazyCovariance, PackedLazyCovariance
     @test flag
 
     # Packed covariance matrices.
-    C = cov(f, S, σ; pack=true)
+    C = @inferred cov(f, S, σ; pack=true)
     @test size(C) == (nnz, nnz)
     @test C == C' # is matrix symmetric?
-    LC = PackedLazyCovariance(f, S, σ)
+    LC = @inferred PackedLazyCovariance(f, S, σ)
     @test size(LC) == (nnz,nnz)
     @test axes(LC) === map(Base.OneTo, size(LC))
     @test LC ≈ C
     @test diag(LC) === var(LC)
 
     # Empirical structure function.
-    A =  EmpiricalStructFunc(S)
+    A = @inferred EmpiricalStructFunc(S, nothing) # slow
+    B = @inferred EmpiricalStructFunc(S) # fast
     let countnz = StructureFunctions.countnz
-        @test values(A) === A.values
-        @test valtype(A) === eltype(values(A))
-        @test weights(A) === A.weights
+        @test countnz(A.support) == countnz(S)
+        @test minimum(A.support) ≥ 0
+        @test A.support == B.support
+        let A_vals = values(A), B_vals = values(B)
+            @test extrema(A_vals) == (0, 0)
+            @test valtype(A) === eltype(A_vals)
+            @test extrema(B_vals) == (0, 0)
+            @test valtype(B) === eltype(B_vals)
+        end
+        @test max_abs_dif(A.den, B.den) ≤ 1e-10
+        @test extrema(A.num) == (0, 0)
+        @test extrema(B.num) == (0, 0)
         @test nobs(A) === A.nobs
         @test A.nobs == 0
-        @test countnz(A.support) == countnz(S)
-        @test extrema(A.values) == (0, 0)
-        @test extrema(A.weights) == (0, 0)
-        for i in 1:43
+        @test nobs(B) === B.nobs
+        @test B.nobs == 0
+        for i in 1:3
             x = randn(valtype(A), size(A.support))
             push!(A, x)
+            push!(B, x)
             @test A.nobs == i
-            wmin, wmax = extrema(A.weights)
-            @test wmin ≥ 0
-            @test wmax > 0
+            @test B.nobs == i
+            let A_vals = values(A), B_vals = values(B)
+                @test max_abs_dif(A_vals, B_vals) ≤ 1e-10
+            end
         end
         n = A.nobs
         nnz = countnz(A.support)
@@ -79,20 +98,8 @@ using StructureFunctions: LazyCovariance, PackedLazyCovariance
             push!(A, x)
             @test A.nobs == i+n
             @test nobs(A) === A.nobs
-            wmin, wmax = extrema(A.weights)
-            @test wmin ≥ 0
-            @test wmax > 0
         end
     end
-    @test all(A .== A.values)
-    for i in eachindex(A)
-        A[i] = zero(eltype(A))
-    end
-    @test all(iszero, A.values)
-    for i in eachindex(A)
-        A[i] = one(eltype(A))
-    end
-    @test all(isone, A.values)
 
 end
 
