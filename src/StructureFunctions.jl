@@ -1,9 +1,9 @@
 module StructureFunctions
 
 export
-    EmpiricalStructureFunction,
+    AbstractStructFunc,
+    EmpiricalStructFunc,
     KolmogorovStructFunc,
-    StructureFunction,
     cov, var, diag, nobs, weights
 
 using TypeUtils, OffsetArrays
@@ -13,7 +13,7 @@ import Statistics: cov, var
 import LinearAlgebra: diag
 
 """
-    StructureFunction{T}
+    AbstractStructFunc{T}
 
 is the abstract type of structure functions using floating-point type `T` for
 their computations.
@@ -25,16 +25,16 @@ A structure function `Dᵩ` of a random field `φ` is a callable object such tha
 where `⟨…⟩` denotes expectation while `r` and `Δr` are Cartesian coordinates in
 units of the grid sampling step.
 
-For sub-types of `StructureFunction{T}`, it is only necessary to implement
+For sub-types of `AbstractStructFunc{T}`, it is only necessary to implement
 calling the structure function object with a tuple of coordinates.
 
 """
-abstract type StructureFunction{T<:AbstractFloat} <: Function; end
+abstract type AbstractStructFunc{T<:AbstractFloat} <: Function; end
 
 # convert Cartesian index. NOTE: Only works for Julia ≥ 1.3
-(Dᵩ::StructureFunction)(r::CartesianIndex) = Dᵩ(Tuple(r))
+(Dᵩ::AbstractStructFunc)(r::CartesianIndex) = Dᵩ(Tuple(r))
 
-Base.convert(::Type{S}, Dᵩ::S) where {S<:StructureFunction} = Dᵩ
+Base.convert(::Type{S}, Dᵩ::S) where {S<:AbstractStructFunc} = Dᵩ
 
 """
     KolmogorovStructFunc{T}(r0)
@@ -43,7 +43,7 @@ yields a Kolmogorov structure function for Fried's parameter `r0` (in units of
 the grid sampling step).
 
 """
-struct KolmogorovStructFunc{T<:AbstractFloat} <: StructureFunction{T}
+struct KolmogorovStructFunc{T<:AbstractFloat} <: AbstractStructFunc{T}
     r0::T
     q::T  # to store precompted value of 1/r0^2
     KolmogorovStructFunc{T}(r0::T) where {T<:AbstractFloat} =
@@ -64,7 +64,7 @@ KolmogorovStructFunc(r0::Real) = KolmogorovStructFunc{float(typeof(r0))}(r0)
 KolmogorovStructFunc(Dᵩ::KolmogorovStructFunc) = Dᵩ
 KolmogorovStructFunc{T}(Dᵩ::KolmogorovStructFunc{T}) where {T} = Dᵩ
 KolmogorovStructFunc{T}(Dᵩ::KolmogorovStructFunc) where {T} = KolmogorovStructFunc{T}(Dᵩ.r0)
-for type in (:StructureFunction, :KolmogorovStructFunc)
+for type in (:AbstractStructFunc, :KolmogorovStructFunc)
     @eval begin
         Base.convert(::Type{$type{T}}, Dᵩ::KolmogorovStructFunc{T}) where {T} = Dᵩ
         Base.convert(::Type{$type{T}}, Dᵩ::KolmogorovStructFunc) where {T} =
@@ -150,7 +150,7 @@ if `S[r]` and `S[r′]` are both non-zero, the covariance being zero if any of
 `r` or `r′` is outside the support.
 
 """
-function var(Dᵩ::StructureFunction{T},
+function var(Dᵩ::AbstractStructFunc{T},
              S::AbstractArray{X},
              σ::Real = zero(T)) where {T<:AbstractFloat,X<:Real}
     # Check piston variance.
@@ -208,7 +208,7 @@ function var(Dᵩ::StructureFunction{T},
 end
 
 """
-    cov(Dᵩ::StructureFunction, S, σ=0; pack=false) -> Cᵩ
+    cov(Dᵩ::AbstractStructFunc, S, σ=0; pack=false) -> Cᵩ
 
 yields the covariance of a random field whose structure function is `Dᵩ` over
 an support defined by `S` and whose piston mode has a standard deviation of
@@ -225,7 +225,7 @@ true.
 The implemented method is described in the notes accompanying this package.
 
 """
-function cov(Dᵩ::StructureFunction{T},
+function cov(Dᵩ::AbstractStructFunc{T},
              S::AbstractArray{<:Real},
              σ::Real = zero(T);
              pack::Bool = false) where {T<:AbstractFloat}
@@ -297,7 +297,7 @@ syntax or via getters:
 
 """
 struct LazyCovariance{T<:AbstractFloat,N,
-                      F<:StructureFunction{T},
+                      F<:AbstractStructFunc{T},
                       S<:AbstractArray{T,N},
                       D<:AbstractArray{T,N}} <: AbstractMatrix{T}
     func::F     # structure function
@@ -307,7 +307,7 @@ struct LazyCovariance{T<:AbstractFloat,N,
     # The inner constructor is to ensure that arrays standard linear indexing
     # and the the same axes.
     function LazyCovariance(Dᵩ::F, sup::S, diag::D) where {T<:AbstractFloat,N,
-                                                           F<:StructureFunction{T},
+                                                           F<:AbstractStructFunc{T},
                                                            S<:AbstractArray{T,N},
                                                            D<:AbstractArray{T,N}}
         has_standard_linear_indexing(sup) || throw(ArgumentError(
@@ -321,12 +321,12 @@ struct LazyCovariance{T<:AbstractFloat,N,
 end
 
 # Getters.
-StructureFunction(A::LazyCovariance) = A.func
+AbstractStructFunc(A::LazyCovariance) = A.func
 diag(A::LazyCovariance) = A.diag
 var(A::LazyCovariance) = diag(A)
 
 # Constructor.
-function LazyCovariance(Dᵩ::StructureFunction{T},
+function LazyCovariance(Dᵩ::AbstractStructFunc{T},
                         S::AbstractArray{<:Real,N},
                         σ::Real = zero(T)) where {T<:AbstractFloat,N}
     sup = normalize_support(T, S)
@@ -406,7 +406,7 @@ The fields of a packed lazy covariance object `Cᵩ` may be retrieved by the
 
  """
 struct PackedLazyCovariance{T<:AbstractFloat,N,
-                            F<:StructureFunction{T},
+                            F<:AbstractStructFunc{T},
                             S<:AbstractArray{T,N},
                             M<:AbstractArray{Bool,N},
                             I<:AbstractVector{<:CartesianIndex{N}},
@@ -418,7 +418,7 @@ struct PackedLazyCovariance{T<:AbstractFloat,N,
     diag::D     # diagonal entries, also non-uniform variances
     function PackedLazyCovariance(Dᵩ::F, sup::S, mask::M, inds::I,
                                   diag::D) where {T<:AbstractFloat,N,
-                                                  F<:StructureFunction{T},
+                                                  F<:AbstractStructFunc{T},
                                                   I<:AbstractVector{<:CartesianIndex{N}},
                                                   S<:AbstractArray{T,N},
                                                   M<:AbstractArray{Bool,N},
@@ -434,7 +434,7 @@ check_struct(A::PackedLazyCovariance) = check_struct(
 function check_struct(::Type{<:PackedLazyCovariance},
                       Dᵩ::F, sup::S, mask::M, inds::I,
                       diag::D) where {T<:AbstractFloat,N,
-                                      F<:StructureFunction{T},
+                                      F<:AbstractStructFunc{T},
                                       I<:AbstractVector{<:CartesianIndex{N}},
                                       S<:AbstractArray{T,N},
                                       M<:AbstractArray{Bool,N},
@@ -468,11 +468,11 @@ function check_struct(::Type{<:PackedLazyCovariance},
     nothing
 end
 
-StructureFunction(A::PackedLazyCovariance) = A.func
+AbstractStructFunc(A::PackedLazyCovariance) = A.func
 diag(A::PackedLazyCovariance) = A.diag
 var(A::PackedLazyCovariance) = diag(A)
 
-function PackedLazyCovariance(Dᵩ::StructureFunction{T},
+function PackedLazyCovariance(Dᵩ::AbstractStructFunc{T},
                               S::AbstractArray{<:Real,N},
                               σ::Real = zero(T)) where {T<:AbstractFloat,N}
     return PackedLazyCovariance(LazyCovariance(Dᵩ, S, σ))
@@ -526,7 +526,7 @@ Base.IndexStyle(::PackedLazyCovariance) = IndexCartesian()
 end
 
 """
-    A = EmpiricalStructureFunction{T}(S)
+    A = EmpiricalStructFunc{T}(S)
 
 yields an (empty) empirical structure function with values of floating-point
 type `T` and for a support `S`. An empirical structure function `A` behaves
@@ -560,60 +560,60 @@ Some methods are extended to retrieve these properties:
     valtype(A) # element type of values
 
 """
-mutable struct EmpiricalStructureFunction{T<:AbstractFloat,N,
-                                          S<:AbstractArray{T,N},
-                                          A<:OffsetArray{T,N}} <: AbstractArray{T,N}
+mutable struct EmpiricalStructFunc{T<:AbstractFloat,N,
+                                   S<:AbstractArray{T,N},
+                                   A<:OffsetArray{T,N}} <: AbstractArray{T,N}
     support::S # normalized support
     values::A  # weighted average of values
     weights::A # cumulated weights
     nobs::Int  # number of observations
 end
 
-StatsBase.nobs(A::EmpiricalStructureFunction) = getfield(A, :nobs)
-StatsBase.weights(A::EmpiricalStructureFunction) = getfield(A, :weights)
+StatsBase.nobs(A::EmpiricalStructFunc) = getfield(A, :nobs)
+StatsBase.weights(A::EmpiricalStructFunc) = getfield(A, :weights)
 
-Base.valtype(A::EmpiricalStructureFunction) = valtype(typeof(A))
-Base.valtype(::Type{<:EmpiricalStructureFunction{T}}) where {T} = T
-Base.values(A::EmpiricalStructureFunction) = getfield(A, :values)
+Base.valtype(A::EmpiricalStructFunc) = valtype(typeof(A))
+Base.valtype(::Type{<:EmpiricalStructFunc{T}}) where {T} = T
+Base.values(A::EmpiricalStructFunc) = getfield(A, :values)
 
 # Make properties read-only.
-@inline Base.getproperty(A::EmpiricalStructureFunction, f::Symbol) = getfield(A, f)
-Base.setproperty!(A::EmpiricalStructureFunction, f::Symbol) = error(
+@inline Base.getproperty(A::EmpiricalStructFunc, f::Symbol) = getfield(A, f)
+Base.setproperty!(A::EmpiricalStructFunc, f::Symbol) = error(
     "attempt to ", (f ∈ propertynames(A) ? "modify read-only" : "access non-existing"),
     " property `$f`")
 
-EmpiricalStructureFunction(S::AbstractArray{T,N}) where {T,N} =
-    EmpiricalStructureFunction{float(T)}(S)
+EmpiricalStructFunc(S::AbstractArray{T,N}) where {T,N} =
+    EmpiricalStructFunc{float(T)}(S)
 
-function EmpiricalStructureFunction{T}(S::AbstractArray{<:Any,N}) where {T<:AbstractFloat,N}
+function EmpiricalStructFunc{T}(S::AbstractArray{<:Any,N}) where {T<:AbstractFloat,N}
     S = normalize_support(T, S)
     inds = map(r -> (first(r) - last(r)):(last(r) - first(r)), axes(S))
     dims = map(d -> 2d - 1, size(S))
     vals = OffsetArray(zeros(T, dims), inds)
     wgts = OffsetArray(zeros(T, dims), inds)
-    return EmpiricalStructureFunction{T,N,typeof(S),typeof(vals)}(S, vals, wgts, 0)
+    return EmpiricalStructFunc{T,N,typeof(S),typeof(vals)}(S, vals, wgts, 0)
 end
 
 # Implement abstract array API.
-Base.length(A::EmpiricalStructureFunction) = length(A.values)
-Base.size(A::EmpiricalStructureFunction) = size(A.values)
-Base.axes(A::EmpiricalStructureFunction) = axes(A.values)
-Base.IndexStyle(::EmpiricalStructureFunction{T,N,S,A}) where {T,N,S,A} = IndexStyle(A)
+Base.length(A::EmpiricalStructFunc) = length(A.values)
+Base.size(A::EmpiricalStructFunc) = size(A.values)
+Base.axes(A::EmpiricalStructFunc) = axes(A.values)
+Base.IndexStyle(::EmpiricalStructFunc{T,N,S,A}) where {T,N,S,A} = IndexStyle(A)
 
-@inline function Base.getindex(A::EmpiricalStructureFunction, I::Vararg{Int})
+@inline function Base.getindex(A::EmpiricalStructFunc, I::Vararg{Int})
     vals = A.values
     @boundscheck checkbounds(Bool, vals, I...) || throw(BoundsError(A, I...))
     @inbounds vals[I...]
 end
 
-@inline function Base.setindex!(A::EmpiricalStructureFunction, x, I::Vararg{Int})
+@inline function Base.setindex!(A::EmpiricalStructFunc, x, I::Vararg{Int})
     vals = A.values
     @boundscheck checkbounds(Bool, vals, I...) || throw(BoundsError(A, I...))
     @inbounds vals[I...] = x
     return A
 end
 
-function Base.push!(A::EmpiricalStructureFunction{T,N},
+function Base.push!(A::EmpiricalStructFunc{T,N},
                     x::Union{AbstractArray{<:Real,N},
                              AbstractVector{<:Real}}) where {T,N}
     S = A.support
@@ -631,7 +631,7 @@ function Base.push!(A::EmpiricalStructureFunction{T,N},
 end
 
 function unsafe_update!(::Val{:full},
-                        A::EmpiricalStructureFunction{T,N},
+                        A::EmpiricalStructFunc{T,N},
                         x::AbstractArray{<:Real,N}) where {T,N}
     S = A.support
     R = CartesianIndices(S)
@@ -650,7 +650,7 @@ function unsafe_update!(::Val{:full},
 end
 
 function unsafe_update!(::Val{:sparse},
-                        A::EmpiricalStructureFunction{T,N},
+                        A::EmpiricalStructFunc{T,N},
                         x::AbstractVector{<:Real}) where {T,N}
     S = A.support
     R = CartesianIndices(S)
@@ -670,7 +670,7 @@ function unsafe_update!(::Val{:sparse},
     nothing
 end
 
-@inline function unsafe_update!(A::EmpiricalStructureFunction{T,N},
+@inline function unsafe_update!(A::EmpiricalStructFunc{T,N},
                                 Δr::CartesianIndex{N},
                                 wgt::T,
                                 val::T) where {T, N}
@@ -681,7 +681,7 @@ end
 end
 
 # Provide list of (public) properties.
-for T in (LazyCovariance, PackedLazyCovariance, EmpiricalStructureFunction)
+for T in (LazyCovariance, PackedLazyCovariance, EmpiricalStructFunc)
     @eval Base.propertynames(::$T) = $(Tuple(fieldnames(T)))
 end
 

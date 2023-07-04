@@ -53,11 +53,13 @@ using StructureFunctions: LazyCovariance, PackedLazyCovariance
     @test LC ≈ C
     @test diag(LC) === var(LC)
 
-    # Empirical Structure function.
-    A =  EmpiricalStructureFunction(S)
+    # Empirical structure function.
+    A =  EmpiricalStructFunc(S)
     let countnz = StructureFunctions.countnz
         @test values(A) === A.values
         @test valtype(A) === eltype(values(A))
+        @test weights(A) === A.weights
+        @test nobs(A) === A.nobs
         @test A.nobs == 0
         @test countnz(A.support) == countnz(S)
         @test extrema(A.values) == (0, 0)
@@ -76,6 +78,7 @@ using StructureFunctions: LazyCovariance, PackedLazyCovariance
             x = randn(valtype(A), nnz)
             push!(A, x)
             @test A.nobs == i+n
+            @test nobs(A) === A.nobs
             wmin, wmax = extrema(A.weights)
             @test wmin ≥ 0
             @test wmax > 0

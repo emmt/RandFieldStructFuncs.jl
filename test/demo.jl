@@ -21,7 +21,7 @@ plimg(v; fig=1, title="Variance");
 sleep(0.1);
 
 # Cholesky decomposition of the covariance.
-LL′ = cholesky(Cᵩ); # C = L*L'
+LL′ = cholesky(Cᵩ); # Cᵩ = L*L'
 L = LL′.L;
 
 # Generate a turbulent wavefront.
@@ -34,7 +34,7 @@ sleep(0.1);
 n = 100;
 printstyled("Computing empirical structure function from $n observations.\nHold your breath...\n";
             bold=true, color=:yellow)
-esf = EmpiricalStructureFunction(S);
+esf = EmpiricalStructFunc(S);
 for i in 1:n;
     w[Cᵩ.mask] = L*randn(eltype(L), size(L,2));
     push!(esf, w);
