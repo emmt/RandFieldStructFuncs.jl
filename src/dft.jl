@@ -35,7 +35,7 @@ Also see: [`goodfftdims`](@ref), [`rfftdims`](@ref), [`FFTOperator`](@ref).
 
 """
 goodfftdim(len::Int) = nextprod(goodfftdim_multiples, as(Int, len))
-const goodfftdim_multiples = (2,3,5) # [2,3,5] for Julia < 1.6
+const goodfftdim_multiples = VERSION ≥ v"1.6" ? (2,3,5) : [2,3,5]
 
 """
     goodfftdims(dims)

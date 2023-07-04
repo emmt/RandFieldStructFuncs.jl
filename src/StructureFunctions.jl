@@ -611,11 +611,11 @@ EmpiricalStructFunc(S::AbstractArray{<:Any,N}, plan::Plan{Complex{T}}; kwds...) 
     EmpiricalStructFunc{T}(S, plan; kwds...)
 
 function EmpiricalStructFunc{T}(S::AbstractArray{<:Real,N};
-                                threshold::Union{Nothing,Real}= nothing,
+                                threshold::Union{Nothing,Real} = nothing,
                                 kwds...) where {T<:AbstractFloat,N}
     dims = goodfftdims(map(d -> 2d - 1, size(S)))
     plan = plan_fft(Array{Complex{T}}(undef, dims); kwds...)
-    return EmpiricalStructFunc{T}(S, plan; threshold)
+    return EmpiricalStructFunc{T}(S, plan; threshold=threshold)
 end
 
 function EmpiricalStructFunc{T}(S::AbstractArray{<:Real,N},
