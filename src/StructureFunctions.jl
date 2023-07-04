@@ -31,7 +31,8 @@ calling the structure function object with a tuple of coordinates.
 """
 abstract type AbstractStructFunc{T<:AbstractFloat} <: Function; end
 
-# convert Cartesian index. NOTE: Only works for Julia ≥ 1.3
+# Convert Cartesian index.
+# NOTE: Make abstract type callable only works for Julia ≥ 1.3
 (Dᵩ::AbstractStructFunc)(r::CartesianIndex) = Dᵩ(Tuple(r))
 
 Base.convert(::Type{S}, Dᵩ::S) where {S<:AbstractStructFunc} = Dᵩ
@@ -100,7 +101,7 @@ end
 """
     StructureFunctions.check_support(S)
 
-yields the sum of values in `S` throwing an exception is `S` is not valid to
+yields the sum of values in `S` throwing an exception if `S` is not valid to
 specify a support.
 
 """
