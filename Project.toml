@@ -1,7 +1,7 @@
 name = "StructureFunctions"
 uuid = "3b927206-3603-4c32-b475-c7648854e36c"
 authors = ["Éric Thiébaut <eric.thiebaut@univ-lyon1.fr> and contributors"]
-version = "0.1.2"
+version = "0.2.0"
 
 [deps]
 AbstractFFTs = "621f4979-c628-5d54-868e-fcf4e3e8185c"
