@@ -229,7 +229,7 @@ as would be done by rounding $a$ to the nearest integer. Noting that
 multiplying $S$ by any non-zero factor cancels and thus has no incidence on the
 computed empirical structure function, the fast algorithm may also be applied
 to any discrete support $S$ with nonnegative entries (this includes the
-\emph{scaled support} introduced in Eq.~\eqref{eq:S-def}) but the value of
+\emph{normalized support} introduced in Eq.~\eqref{eq:S-def}) but the value of
 $\tau$ must be then be chosen appropriately. The number of operations in the
 fast algorithm in Eq.~\eqref{alg:fast-struct-func} is dominated by the
 $2\,T + 3$ FFTs.
@@ -268,8 +268,8 @@ defined by ($\forall r \in \mathcal{V}$):
 \end{align}
 with $|\mathcal{V}|=\int_{\mathcal{V}}\mathrm{d}r$ the volume of $\mathcal{V}$.
 
-Introducing the scaled support function\footnote{so-called scaled \emph{pupil
-    function} in optics} $S(r)$ such that for any function $f(r)$:
+Introducing the normalized support function\footnote{so-called normalized
+  \emph{pupil function} in optics} $S(r)$ such that for any function $f(r)$:
 \begin{align}
   \label{eq:S-def}
   \int f(r)\,S(r)\,\mathrm{d}r = \frac{1}{|\mathcal{V}|} \int_{\mathcal{V}} f(r)\,\mathrm{d}r,
@@ -279,7 +279,7 @@ the de-pistoned field writes:
   \psi(r) = \phi(r) - \int \phi(r')\,S(r')\,\mathrm{d}r'.
 \end{align}
 
-A property of the scaled support function is that:
+A property of the normalized support function is that:
 \begin{align}
   \int S(r)\,\mathrm{d}r = 1,
 \end{align}
