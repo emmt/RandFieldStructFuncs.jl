@@ -21,7 +21,7 @@
 \date{1st version: March 10, 2023; last revision: July 4, 2023}
 \maketitle
 
-\abstract{This notes details a fast algorithm to compute the empirical
+\abstract{This note proposes a fast algorithm to compute the empirical
   structure function of a random field. This note describes how to express the
   covariance $\Cov_{\varphi}$ of a Gaussian random field
   $\varphi \sim \mathcal{N}(0, \Cov_{\varphi})$ given the structure function
@@ -33,7 +33,7 @@
 
 \subsection{Definition and properties of the structure function}
 
-The structure function of the random field $\phi(r)$ is defined by:
+The structure function of the centered random field $\phi(r)$ is defined by:
 \begin{equation}
   \label{eq:D-phi}
   D_{\phi}(\Delta r) = \langle(\phi(r) - \phi(r+\Delta r))^{2}\rangle
@@ -49,8 +49,8 @@ even function:
   D_{\phi}(-\Delta r) =  D_{\phi}(\Delta r).
 \end{equation}
 
-Developping the expression of the field structure function and assuming that
-$\phi(r)$ is centered $\forall r$, i.e.\ $\langle\phi(r)\rangle = 0$, yields:
+Developping the expression of the field structure function and since $\phi(r)$
+is centered $\forall r$, i.e.\ $\langle\phi(r)\rangle = 0$, yields:
 \begin{align}
   D_{\phi}(\Delta r)
   %&= \langle(\phi(r) - \phi(r+\Delta r))^{2}\rangle \notag \\
@@ -223,14 +223,15 @@ structure function of $T$ sampled random fields $\{\phi_{t}\}_{t\in1:t}$:
 \end{equation}
 where $\tau > 0$ is a threshold to account for rounding errors when $a$ is
 computed by means of FFTs. When $S$ takes its values on $\{0,1\}$,
-$a[i] = |\mathcal{R}_{i}|$, the entries of $a$ should be integers, so we take
-$\tau = 1/2$ to disentangle between $a[i] \simeq 0$ and $a[i] \gtrsim 1$ as
-would be done by rounding $a$ to the nearest integer. Noting that multiplying
-$S$ by any non-zero factor cancels has no incidence on the computed empirical
-structure function, the fast algorithm may also be applied to any discrete
-support $S$ with nonnegative entries (this includes the scaled support) but the
-value of $\tau$ must be then be chosen appropriately. The number of operations
-in the fast algorithm in Eq.~\eqref{alg:fast-struct-func} is dominated by the
+$a[i] = |\mathcal{R}_{i}|$ and the entries of $a$ should be integers, so we
+take $\tau = 1/2$ to disentangle between $a[i] \simeq 0$ and $a[i] \gtrsim 1$
+as would be done by rounding $a$ to the nearest integer. Noting that
+multiplying $S$ by any non-zero factor cancels and thus has no incidence on the
+computed empirical structure function, the fast algorithm may also be applied
+to any discrete support $S$ with nonnegative entries (this includes the
+\emph{scaled support} introduced in Eq.~\eqref{eq:S-def}) but the value of
+$\tau$ must be then be chosen appropriately. The number of operations in the
+fast algorithm in Eq.~\eqref{alg:fast-struct-func} is dominated by the
 $2\,T + 3$ FFTs.
 
 In the $\mathtt{StructureFunctions}$\footnote{\url{https://github.com/emmt/StructureFunctions.jl}} Julia package, an instance $A$ of
@@ -256,7 +257,9 @@ may be used as follows:
 Note that the denominator is computed at creation of the structure and that its
 values are already soft-thresholded.
 
+
 \section{De-Pistoned field}
+\label{sec:de-pistoned-field}
 
 The de-pistoned field $\psi(r)$ over a finite size volume $\mathcal{V}$ is
 defined by ($\forall r \in \mathcal{V}$):
