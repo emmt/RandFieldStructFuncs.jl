@@ -1,7 +1,7 @@
 name = "RandFieldStructFuncs"
 uuid = "8cf9e0f4-2236-4022-885f-e952f37830b5"
 authors = ["Éric Thiébaut <eric.thiebaut@univ-lyon1.fr> and contributors"]
-version = "0.2.1"
+version = "0.3.0"
 
 [deps]
 AbstractFFTs = "621f4979-c628-5d54-868e-fcf4e3e8185c"
