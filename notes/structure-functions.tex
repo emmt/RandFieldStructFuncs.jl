@@ -237,9 +237,9 @@ $\psi(r)$ yields the field ($\forall r \in \mathcal{V}$):
   \label{eq:varphi-def}
   \varphi(r) = \psi(r) + \alpha,
 \end{align}
-which has an invertible covariance provided $\sigma \not= 0$. Since $\alpha$
-and $\psi(r)$ are mutually independent whatever $r$, the covariance of the
-field $\varphi(r)$ is trivial to compute:
+which has an invertible covariance provided $\sigma > 0$. Since $\alpha$ and $\psi(r)$ are
+mutually independent whatever $r$, the covariance of the field $\varphi(r)$ is trivial to
+compute:
 \begin{align}
   \Cov_{\varphi}(r,r')
   &= \Cov_{\psi}(r,r') + \sigma^{2} \notag\\
@@ -253,11 +253,11 @@ where $D_{\varphi} = D_{\phi}$ the structure function of $\varphi$ and with:
 \end{equation}
 its variance.
 
-The random field $\varphi(r)$ for $r \in \mathcal{V}$, is a centered Gaussian
-field whose covariance $\Cov_{\varphi}$ is given by Eqs.~\eqref{eq:Cov-varphi}
-and \eqref{eq:Var-varphi} and only depends on the structure function
-$D_{\varphi}$ of the field and on the standard deviation $\sigma$ of the
-piston. If $\sigma \not= 0$, the covariance $\Cov_{\varphi}$ is invertible.
+The random field $\varphi(r)$ for $r \in \mathcal{V}$, is a centered Gaussian field whose
+covariance $\Cov_{\varphi}$ is given by Eqs.~\eqref{eq:Cov-varphi} and
+\eqref{eq:Var-varphi} and only depends on the structure function
+$D_{\varphi} = D_{\psi} = D_{\phi}$ of the field and on the standard deviation $\sigma$ of
+the piston. If $\sigma \not= 0$, the covariance $\Cov_{\varphi}$ is invertible.
 
 
 \section{Numerical methods}
