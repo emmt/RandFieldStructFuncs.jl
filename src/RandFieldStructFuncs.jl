@@ -45,7 +45,7 @@ Base.convert(::Type{S}, Dᵩ::S) where {S<:AbstractStructFunc} = Dᵩ
     KolmogorovStructFunc{T}(r0)
 
 yield a Kolmogorov structure function for Fried's parameter `r0`. Optional
-parameter `T` is to specifiy the flaoting-point type for computations.
+parameter `T` is to specifiy the floating-point type for computations.
 
 """
 struct KolmogorovStructFunc{T<:AbstractFloat,R,Q} <: AbstractStructFunc{T}
@@ -156,14 +156,13 @@ end
 """
     var(Dᵩ, S, σ=0) -> Vᵩ
 
-yields the non-uniform variance `Vᵩ` of a random field having a structure
-function `Dᵩ` on a support `S` and a piston mode with standard deviation `σ`.
-The covariance between two nodes of Cartesian coordinates `r` and `r′` is then
-given by:
+yields the non-uniform variance `Vᵩ` of a random field having a structure function `Dᵩ` on
+a support `S` and a piston mode with standard deviation `σ`. The covariance between two
+nodes of Cartesian coordinates `r` and `r′` is then given by:
 
     Cov(r,r′) = (Vᵩ[r] + Vᵩ[r′] - Dᵩ(r - r′))/2
 
-if `S[r]` and `S[r′]` are both non-zero, the covariance being zero if any of
+if `S[r]` and `S[r′]` are both non-zero, the covariance being assumed to be zero if any of
 `r` or `r′` is outside the support.
 
 """
@@ -227,17 +226,15 @@ end
 """
     cov(Dᵩ::AbstractStructFunc, S, σ=0; pack=false) -> Cᵩ
 
-yields the covariance of a random field whose structure function is `Dᵩ` over
-an support defined by `S` and whose piston mode has a standard deviation of
-`σ`.
+yields the covariance of a random field whose structure function is `Dᵩ` over an support
+defined by `S` and whose piston mode has a standard deviation of `σ`.
 
-The range of indices to consider for the random field is the same as that of
-`S` unless keyword `pack` is true, in which case only the indices inside the
-support `S` are considered.
+The range of indices to consider for the random field is the same as that of `S` unless
+keyword `pack` is true, in which case only the indices inside the support `S` are
+considered.
 
-The result is a flattened `n×n` covariance matrix with `n = length(S)` if
-`pack` is false, or `n` the number of non-zeros in the support `S` if `pack` is
-true.
+The result is a flattened `n×n` covariance matrix with `n = length(S)` if `pack` is false,
+or with `n` the number of non-zeros in the support `S` if `pack` is true.
 
 The implemented method is described in the notes accompanying this package.
 
@@ -298,13 +295,13 @@ yields an object that can be used as:
 
     Cᵩ[i, j]
 
-to compute *on the fly* the covariance of a random field whose structure
-function is `Dᵩ` over a support defined by `S` and whose piston mode has a
-standard deviation of `σ`. Indices `i` and `j` can be linear indices or
-Cartesian indices that must be valid to index `S`.
+to compute *on the fly* the covariance of a random field whose structure function is `Dᵩ`
+over a support defined by `S` and whose piston mode has a standard deviation of `σ`.
+Indices `i` and `j` can be linear indices or Cartesian indices that must be valid to index
+`S`.
 
-The fields of a lazy covariance object `Cᵩ` may be retrieved by the `Cᵩ.key`
-syntax or via getters:
+The fields of a lazy covariance object `Cᵩ` may be retrieved by the `Cᵩ.key` syntax or via
+accessors:
 
     Cᵩ.func    # yields the structure function
     Cᵩ.support # yields the normalized support
@@ -337,7 +334,7 @@ struct LazyCovariance{T<:AbstractFloat,N,
     end
 end
 
-# Getters.
+# Accessors.
 AbstractStructFunc(A::LazyCovariance) = A.func
 diag(A::LazyCovariance) = A.diag
 var(A::LazyCovariance) = diag(A)
@@ -405,13 +402,13 @@ yields an object that can be used as:
 
     Cᵩ[i,j]
 
-to compute *on the fly* the covariance of a random field whose structure
-function is `Dᵩ` over a support defined by `S` and whose piston mode has a
-standard deviation of `σ`. Indices `i` and `j` are linear indices in the range
-`1:nnz` with `nnz` the number of non-zeros in the support `S`.
+to compute *on the fly* the covariance of a random field whose structure function is `Dᵩ`
+over a support defined by `S` and whose piston mode has a standard deviation of `σ`.
+Indices `i` and `j` are linear indices in the range `1:nnz` with `nnz` the number of
+non-zeros in the support `S`.
 
-The fields of a packed lazy covariance object `Cᵩ` may be retrieved by the
-`Cᵩ.key` syntax or via getters:
+The fields of a packed lazy covariance object `Cᵩ` may be retrieved by the `Cᵩ.key` syntax
+or via accessors:
 
     Cᵩ.func    # yields the structure function
     Cᵩ.support # yields the normalized support
@@ -545,24 +542,24 @@ end
 """
     A = EmpiricalStructFunc{T}(S[, plan])
 
-yields an (empty) empirical structure function with values of floating-point
-type `T` and for a support `S`. Parameter `T` may be omitted to determine the
-floating-point type from the arguments.
+yields an (empty) empirical structure function with values of floating-point type `T` and
+for a support `S`. Parameter `T` may be omitted to determine the floating-point type from
+the arguments.
 
-If optional argument `plan` is not specified, the empirical structure function
-is updated by means of fast Fourier transforms (FFTs) and keywords `flags` and
-`timelimit` may be specified to build the FFT plan (defaults are
-`flags=FFTW.ESTIMATE` and `timelimit=Inf`). Otherwise, `plan` maybe a
-precomputed suitable FFT plan or `nothing` to use a **slow** update method.
+If optional argument `plan` is not specified, the empirical structure function is updated
+by means of fast Fourier transforms (FFTs) and keywords `flags` and `timelimit` may be
+specified to build the FFT plan (defaults are `flags=FFTW.ESTIMATE` and `timelimit=Inf`).
+Otherwise, `plan` maybe a precomputed suitable FFT plan or `nothing` to use a **slow**
+update method.
 
-The base method `push!` can be used to *update* the data into the empirical
-structure function object:
+The base method `push!` can be used to *update* the data into the empirical structure
+function object:
 
     push!(A, φ)
 
-where `φ` is a random sample which can be an array of the same size as `S`. If
-`plan` is `nothing`, `φ` may also be a vector whose length is the number of
-non-zeros in the support `S`.
+where `φ` is a random sample which can be an array of the same size as `S`. If `plan` is
+`nothing`, `φ` may also be a vector whose length is the number of non-zeros in the support
+`S`.
 
 An empirical structure function object `A` has the following properties:
 
@@ -577,13 +574,13 @@ The following methods are applicable:
     Dᵩ = values(A)  # compute the empirical structure function
     valtype(A)      # element type of `Dᵩ`
 
-The empirical structure function `Dᵩ` computed by `values(A)` is an
-`OffsetArray` instance such that:
+The empirical structure function `Dᵩ` computed by `values(A)` is an `OffsetArray` instance
+such that:
 
     Dᵩ[Δr]
 
-yields the value of the empirical structure function for a displacement `Δr`
-which may be specified as a Cartesian index.
+yields the value of the empirical structure function for a displacement `Δr` which may be
+specified as a Cartesian index.
 
 """
 mutable struct EmpiricalStructFunc{T<:AbstractFloat,N,P,
