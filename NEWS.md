@@ -1,5 +1,9 @@
 # User visible changes in `StructureFunctions`
 
+# Version 0.2.1
+
+- Fried's parameter and argument `r` of `KolmogorovStructFunc` can have units.
+
 # Version 0.2.0
 
 - `StructureFunction` and `EmpiricalStructureFunction` respectively renamed as

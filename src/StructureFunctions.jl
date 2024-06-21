@@ -41,28 +41,41 @@ abstract type AbstractStructFunc{T<:AbstractFloat} <: Function; end
 Base.convert(::Type{S}, Dᵩ::S) where {S<:AbstractStructFunc} = Dᵩ
 
 """
+    KolmogorovStructFunc(r0)
     KolmogorovStructFunc{T}(r0)
 
-yields a Kolmogorov structure function for Fried's parameter `r0` (in units of
-the grid sampling step).
+yield a Kolmogorov structure function for Fried's parameter `r0`. Optional
+parameter `T` is to specifiy the flaoting-point type for computations.
 
 """
-struct KolmogorovStructFunc{T<:AbstractFloat} <: AbstractStructFunc{T}
-    r0::T
-    q::T  # to store precompted value of 1/r0^2
-    KolmogorovStructFunc{T}(r0::T) where {T<:AbstractFloat} =
-        new{T}(r0, one(T)/r0^2)
+struct KolmogorovStructFunc{T<:AbstractFloat,R,Q} <: AbstractStructFunc{T}
+    r0::R
+    q::Q # to store precomputed value of 1/r0^2
+    function KolmogorovStructFunc(r0::Number)
+        r0 = float(r0)
+        T = real_type(r0)
+        q = inv(r0)^2
+        return new{T,typeof(r0),typeof(q)}(r0, q)
+    end
+end
+
+Base.show(io::IO, ::MIME"text/plain", D::KolmogorovStructFunc) = show(io, D)
+function Base.show(io::IO, D::KolmogorovStructFunc{T}) where {T}
+    print(io, "KolmogorovStructFunc{")
+    show(io, T)
+    print(io, "}(")
+    show(io, D.r0)
+    print(io, ")")
+    nothing
 end
 
 # Compute structure function.
-@inline (Dᵩ::KolmogorovStructFunc{T})(r::NTuple{2,Real}) where {T<:AbstractFloat} = Dᵩ(map(as(T), r))
+@inline (Dᵩ::KolmogorovStructFunc{T,R})(r::NTuple{2,Number}) where {T,R} =
+    as(T,6.88)*(Dᵩ.q*(as(R,r[1])^2 + as(R,r[2])^2))^as(T,5//6)
 
-(Dᵩ::KolmogorovStructFunc{T})(r::NTuple{2,T}) where {T<:AbstractFloat} =
-    as(T,6.88)*(Dᵩ.q*(r[1]^2 + r[2]^2))^as(T,5/6)
-
-# Outer constructors.
-KolmogorovStructFunc{T}(r0::Real) where {T<:AbstractFloat} = KolmogorovStructFunc{T}(as(T, r0))
-KolmogorovStructFunc(r0::Real) = KolmogorovStructFunc{float(typeof(r0))}(r0)
+# Outer constructor to provide floating-point type for computations.
+KolmogorovStructFunc{T}(r0::Number) where {T<:AbstractFloat} =
+    KolmogorovStructFunc(convert_real_type(T, r0))
 
 # Conversions.
 KolmogorovStructFunc(Dᵩ::KolmogorovStructFunc) = Dᵩ
