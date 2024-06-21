@@ -1,5 +1,5 @@
-name = "StructureFunctions"
-uuid = "3b927206-3603-4c32-b475-c7648854e36c"
+name = "RandFieldStructFuncs"
+uuid = "8cf9e0f4-2236-4022-885f-e952f37830b5"
 authors = ["Éric Thiébaut <eric.thiebaut@univ-lyon1.fr> and contributors"]
 version = "0.2.1"
 

@@ -1,4 +1,9 @@
-# User visible changes in `StructureFunctions`
+# User visible changes in `RandFieldStructFuncs`
+
+# Version 0.3.0
+
+- Package renamed `RandFieldStructFuncs` as `StructureFunctions` already exists in General
+  Julia's registry.
 
 # Version 0.2.1
 

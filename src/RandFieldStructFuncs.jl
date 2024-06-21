@@ -1,4 +1,4 @@
-module StructureFunctions
+module RandFieldStructFuncs
 
 export
     AbstractStructFunc,
@@ -90,7 +90,7 @@ for type in (:AbstractStructFunc, :KolmogorovStructFunc)
 end
 
 """
-    StructureFunctions.normalize_support(T<:AbstractFloat, S)
+    RandFieldStructFuncs.normalize_support(T<:AbstractFloat, S)
 
 yields a normalized support function with elements of floating-point type `T`
 given the sampled support function `S` not necessarily normalized and throwing
@@ -115,7 +115,7 @@ function normalize_support(::Type{T}, S::AbstractArray{<:Real}) where {T<:Abstra
 end
 
 """
-    StructureFunctions.check_support(S)
+    RandFieldStructFuncs.check_support(S)
 
 yields the sum of values in `S` throwing an exception if `S` is not valid to
 specify a support.
@@ -140,7 +140,7 @@ function check_support(S::AbstractArray{X}) where {X<:Real}
 end
 
 """
-    StructureFunctions.countnz(S)
+    RandFieldStructFuncs.countnz(S)
 
 yields the number of non-zeros in array `S`.
 
@@ -292,7 +292,7 @@ function cov(Dᵩ::AbstractStructFunc{T},
 end
 
 """
-    StructureFunctions.LazyCovariance(Dᵩ, S, σ) -> Cᵩ
+    RandFieldStructFuncs.LazyCovariance(Dᵩ, S, σ) -> Cᵩ
 
 yields an object that can be used as:
 
@@ -399,7 +399,7 @@ end
 end
 
 """
-    StructureFunctions.PackedLazyCovariance(Dᵩ, S, σ) -> Cᵩ
+    RandFieldStructFuncs.PackedLazyCovariance(Dᵩ, S, σ) -> Cᵩ
 
 yields an object that can be used as:
 

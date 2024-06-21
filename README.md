@@ -1,6 +1,6 @@
 # Structure functions of random fields in Julia
 
-[![Build Status](https://github.com/emmt/StructureFunctions.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/emmt/StructureFunctions.jl/actions/workflows/CI.yml?query=branch%3Amain) [![Build Status](https://ci.appveyor.com/api/projects/status/github/emmt/StructureFunctions.jl?svg=true)](https://ci.appveyor.com/project/emmt/StructureFunctions-jl) [![Coverage](https://codecov.io/gh/emmt/StructureFunctions.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/emmt/StructureFunctions.jl)
+[![Build Status](https://github.com/emmt/RandFieldStructFuncs.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/emmt/RandFieldStructFuncs.jl/actions/workflows/CI.yml?query=branch%3Amain) [![Build Status](https://ci.appveyor.com/api/projects/status/github/emmt/RandFieldStructFuncs.jl?svg=true)](https://ci.appveyor.com/project/emmt/RandFieldStructFuncs-jl) [![Coverage](https://codecov.io/gh/emmt/RandFieldStructFuncs.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/emmt/RandFieldStructFuncs.jl)
 
 This package is to deal with structure functions of random fields with stationary
 increments in Julia.

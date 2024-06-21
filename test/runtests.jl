@@ -1,8 +1,8 @@
 module TestingStructureFunctions
 
 using Test, Statistics, LinearAlgebra, EasyRanges
-using StructureFunctions
-using StructureFunctions: LazyCovariance, PackedLazyCovariance
+using RandFieldStructFuncs
+using RandFieldStructFuncs: LazyCovariance, PackedLazyCovariance
 
 function max_abs_dif(A::AbstractArray, B::AbstractArray)
     v = zero(promote_type(eltype(A), eltype(B)))
@@ -12,7 +12,7 @@ function max_abs_dif(A::AbstractArray, B::AbstractArray)
     return v
 end
 
-@testset "StructureFunctions.jl" begin
+@testset "RandFieldStructFuncs.jl" begin
     f = @inferred KolmogorovStructFunc(1.2)
     let f32 = KolmogorovStructFunc{Float32}(f)
         z1 = CartesianIndex(0,0)
@@ -27,7 +27,7 @@ end
     S = [sqrt(x^2 + y^2) < 4.5 for x in -6:6, y in -6:6]
     n = length(S)
     nnz = count(x -> x > zero(x), S)
-    @test sum(StructureFunctions.normalize_support(Float64, S)) ≈ 1
+    @test sum(RandFieldStructFuncs.normalize_support(Float64, S)) ≈ 1
 
     # Full covariance matrices.
     C = cov(f, S)
@@ -64,7 +64,7 @@ end
     # Empirical structure function.
     A = @inferred EmpiricalStructFunc(S, nothing) # slow
     B = @inferred EmpiricalStructFunc(S) # fast
-    let countnz = StructureFunctions.countnz
+    let countnz = RandFieldStructFuncs.countnz
         @test countnz(A.support) == countnz(S)
         @test minimum(A.support) ≥ 0
         @test A.support == B.support

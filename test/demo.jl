@@ -1,4 +1,4 @@
-using StructureFunctions
+using RandFieldStructFuncs
 
 using YPlot, PyPlot
 using LinearAlgebra, OffsetArrays
@@ -12,7 +12,7 @@ S = [16.5 ≤ sqrt(x^2 + y^2) < 50.5 for x in -51:51, y in -51:51];
 
 # Create a packed lazy covariance.
 σ = 0.1; # piston variance
-Cᵩ = StructureFunctions.PackedLazyCovariance(Dᵩ, S, σ);
+Cᵩ = RandFieldStructFuncs.PackedLazyCovariance(Dᵩ, S, σ);
 
 # Display the variance.
 v = fill!(similar(Cᵩ.mask, eltype(Cᵩ)), 0);
