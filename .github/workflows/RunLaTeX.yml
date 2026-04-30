@@ -16,4 +16,4 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: PDF
-          path: structure-functions.pdf
+          path: notes/structure-functions.pdf
